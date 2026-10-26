@@ -1,0 +1,86 @@
+{
+  "results": [
+    {
+      "name": "app boots, R3F canvas + scene mounted",
+      "pass": true,
+      "detail": "canvas and scene hook present"
+    },
+    {
+      "name": "scroll advances camera",
+      "pass": true,
+      "detail": "z 12.00 -> 3.01 (progress bar matrix(0.5, 0, 0, 1, 0, 0))"
+    },
+    {
+      "name": "scrolling back reverses camera",
+      "pass": true,
+      "detail": "z back to 11.99 (started 12.00)"
+    },
+    {
+      "name": "sound toggle works + accessible name",
+      "pass": true,
+      "detail": "aria-pressed true -> false"
+    },
+    {
+      "name": "no horizontal overflow @ mobile 375x812",
+      "pass": true,
+      "detail": "scrollWidth 375 vs innerWidth 375"
+    },
+    {
+      "name": "no horizontal overflow @ tablet 768x1024",
+      "pass": true,
+      "detail": "scrollWidth 753 vs innerWidth 768"
+    },
+    {
+      "name": "no horizontal overflow @ desktop 1440x900",
+      "pass": true,
+      "detail": "scrollWidth 1425 vs innerWidth 1440"
+    },
+    {
+      "name": "no horizontal overflow @ wide 1920x1080",
+      "pass": true,
+      "detail": "scrollWidth 1905 vs innerWidth 1920"
+    },
+    {
+      "name": "hero fades out while scrolling",
+      "pass": true,
+      "detail": "hero opacity 0 at 25% scroll"
+    },
+    {
+      "name": "enter flow completes cleanly",
+      "pass": true,
+      "detail": "{\"arrival\":true,\"entering\":false,\"hero\":false}"
+    },
+    {
+      "name": "camera still scroll-driven after ENTER",
+      "pass": true,
+      "detail": "z -7.40 -> -10.40"
+    },
+    {
+      "name": "post-enter camera stays inside the graveyard",
+      "pass": true,
+      "detail": "z -10.40"
+    },
+    {
+      "name": "page renders (root has content, hero present)",
+      "pass": true,
+      "detail": "{\"canvas\":true,\"fallback\":false,\"hero\":true,\"rootChildren\":1}"
+    },
+    {
+      "name": "no unhandled exceptions",
+      "pass": true,
+      "detail": "none"
+    },
+    {
+      "name": "no console errors (optional-audio 404s excluded)",
+      "pass": true,
+      "detail": "none"
+    },
+    {
+      "name": "missing audio handled gracefully",
+      "pass": true,
+      "detail": "no audio messages at all"
+    }
+  ],
+  "consoleErrors": [],
+  "pageErrors": []
+}
