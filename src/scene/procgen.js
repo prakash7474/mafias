@@ -71,7 +71,7 @@ export function buildPathGeometry(width=3.6,len=30,cz=-6){
  * ------------------------------------------------------------------ */
 export function buildTree(seed,opt={}){
   const rng=makeRng(seed*2654435761>>>0);
-  const P=[],I=[],U=[];
+  const P=[],I=[],U=[],T=[];  // T: outer branch-tip anchors (for hanging props)
   const cfg={
     height:opt.height??6,
     trunkR:opt.trunkR??.3,
@@ -151,6 +151,8 @@ export function buildTree(seed,opt={}){
       p.z+t.z*off+(broken?(rng()-.5)*rEnd*.8:0)
     );
     U.push(.5,1);
+    // outer branch tips are candidates for hanging props (ghosts)
+    if(depth>0&&Math.hypot(p.x,p.z)>1.05)T.push([p.x,p.y+t.y*off,p.z]);
     for(let j=0;j<radial;j++)I.push(cap,last+j,last+(j+1)%radial);
 
     // children
@@ -187,6 +189,7 @@ export function buildTree(seed,opt={}){
   g.computeVertexNormals();
   bakeColors(g,{seed,warmth:cfg.warmth,mossy:false,bark:true,height:cfg.height});
   g.computeBoundingSphere();
+  g.userData.tips=T;
   return g;
 }
 

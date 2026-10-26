@@ -3,6 +3,7 @@ import { Canvas } from '@react-three/fiber';
 import { gsap } from 'gsap';
 import { Howl } from 'howler';
 import GraveyardScene from './scene/GraveyardScene.jsx';
+import { stormSettings } from './scene/lightning.js';
 import LogoReveal from './components/LogoReveal.jsx';
 import ClosingLogo from './components/ClosingLogo.jsx';
 
@@ -17,6 +18,7 @@ function supportsWebGL(){
 export default function App(){
   const [webgl]=useState(supportsWebGL);
   const [soundOn,setSoundOn]=useState(false);
+  const [flashesOn,setFlashesOn]=useState(true);
   const [entering,setEntering]=useState(false);
   const [entered,setEntered]=useState(false);
   const [ready, setReady]=useState(false);
@@ -36,8 +38,14 @@ export default function App(){
   },[]);
   const toggleSound=useCallback(()=>{
     const next=!soundOn;setSoundOn(next);
+    stormSettings.sound=next;
     if(next) drone.current?.play(); else drone.current?.pause();
   },[soundOn]);
+  // lightning can be switched off on its own, independently of sound
+  const toggleFlashes=useCallback(()=>{
+    const next=!flashesOn;setFlashesOn(next);
+    stormSettings.flashes=next;
+  },[flashesOn]);
   const enter=useCallback(()=>{
     if(entering||entered)return;
     setEntering(true);if(soundOn)whoosh.current?.play();
@@ -74,7 +82,7 @@ export default function App(){
       : <div className="canvas fallback" role="img" aria-label="A moonlit graveyard under a dark sky"/>}
     <div className="shade"/><div className="grain"/>
     <div className="scroll-progress" style={{transform:`scaleX(${scrollProgress})`}} aria-hidden="true"/>
-    <header className="topbar"><a className="brand" href="#home" aria-label="MAFIAS home">MΛFIΛS</a><span className="descriptor"><i/> CEG · GUINDY</span><button className={`sound ${soundOn?'on':''}`} onClick={toggleSound} aria-pressed={soundOn} aria-label={soundOn?'Turn sound off':'Turn sound on'}><span className="bars"><i/><i/><i/><i/></span>SOUND {soundOn?'ON':'OFF'}</button></header>
+    <header className="topbar"><a className="brand" href="#home" aria-label="MAFIAS home">MΛFIΛS</a><span className="descriptor"><i/> CEG · GUINDY</span><button className={`sound ${soundOn?'on':''}`} onClick={toggleSound} aria-pressed={soundOn} aria-label={soundOn?'Turn sound off':'Turn sound on'}><span className="bars"><i/><i/><i/><i/></span>SOUND {soundOn?'ON':'OFF'}</button><button className={`storm ${flashesOn?'on':''}`} onClick={toggleFlashes} aria-pressed={flashesOn} aria-label={flashesOn?'Turn lightning flashes off':'Turn lightning flashes on'}>FLASH {flashesOn?'ON':'OFF'}</button></header>
     {/* DISABLED */}
     {!entered&&<section className="hero" id="home" style={{opacity:fade,pointerEvents:fade<.05?'none':'auto'}}><p className="eyebrow"><span/> CEG'S UNOFFICIAL VARIETY TEAM <span/></p><h1>PERFORM.<br/><em>CREATE. ENTERTAIN.</em></h1><p className="copy">We entertain, create and inspire —<br/>right here at CEG, Guindy.</p><button ref={enterBtn} className="enter" onClick={enter} disabled={entering}>{entering?'CROSSING OVER…':'ENTER MAFIAS'} <b>↗</b></button><p className="hint">TURN SOUND ON FOR THE FULL EXPERIENCE</p></section>}
     <footer style={{opacity:fade,pointerEvents:fade<.05?'none':'auto'}}><span>MAFIAS • CEG</span><span>SCROLL TO DESCEND ↓</span></footer>

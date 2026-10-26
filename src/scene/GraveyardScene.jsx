@@ -9,6 +9,10 @@ import {
   makeGrassGeometry, makeGroundTextures, makePathTexture, makeGrassTexture,
   makeSoftTexture, makeMoonTexture, makeBarkTexture
 } from './procgen.js';
+import { applyWindBend, updateWind, clearBendShaders } from './wind.js';
+import Ghosts from './Ghosts.jsx';
+import Storm from './Storm.jsx';
+import { stormState } from './lightning.js';
 
 const isSmall=()=>typeof window!=='undefined'&&window.innerWidth<700;
 const prefersReduced=()=>typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -31,6 +35,9 @@ const POST_ENTER_TRAVEL=-3;
    Red atmosphere is localised (haze billboards + smoke), never global. */
 const FOG_COLOR='#151a26';
 const FOG_DENSITY=.0245;
+/* Target colour of the sky dome at the peak of a lightning flash:
+   brighter than white so toneMapped=false lifts the cloud band briefly. */
+const SKY_FLASH=new THREE.Color(2.2,2.5,3.0);
 
 /* ---------------------------------------------------------------- *
  * Shared instanced-mesh helper: one draw call per geometry variant.
@@ -214,15 +221,24 @@ function makeSkyTexture(){
 }
 
 function Sky(){
-  const ref=useRef();
+  const ref=useRef(),matRef=useRef();
   const texture=useMemo(makeSkyTexture,[]);
   useEffect(()=>()=>{texture?.dispose();},[texture]);
-  useFrame((_,delta)=>{if(ref.current)ref.current.rotation.y+=delta*.004;});
+  useFrame((_,delta)=>{
+    if(ref.current)ref.current.rotation.y+=delta*.004;
+    // lightning response: the cloud band brightens toward cool white and
+    // settles back to its exact authored colour between strikes
+    const m=matRef.current;
+    if(m){
+      if(!m.userData.base)m.userData.base=m.color.clone();
+      m.color.copy(m.userData.base).lerp(SKY_FLASH,Math.min(1,stormState.env)*.7);
+    }
+  });
   return <mesh ref={ref} renderOrder={-1} frustumCulled={false}>
     <sphereGeometry args={[90,48,32]}/>
     {texture
-      ?<meshBasicMaterial map={texture} side={THREE.BackSide} fog={false} depthWrite={false} toneMapped={false}/>
-      :<meshBasicMaterial color="#141b30" side={THREE.BackSide} fog={false} depthWrite={false} toneMapped={false}/>}
+      ?<meshBasicMaterial ref={matRef} map={texture} side={THREE.BackSide} fog={false} depthWrite={false} toneMapped={false}/>
+      :<meshBasicMaterial ref={matRef} color="#141b30" side={THREE.BackSide} fog={false} depthWrite={false} toneMapped={false}/>}
   </mesh>;
 }
 
@@ -304,8 +320,10 @@ export default function GraveyardScene(){
   const {camera,scene,gl}=useThree();
   const portal=useRef();
   const scrollTarget=useRef(0),scrollCurrent=useRef(0),postEnter=useRef(false),enterZ=useRef(0),diving=useRef(false),reduced=useRef(false);
+  const stormApi=useRef(null);
 
   /* ---- shared assets: built once per quality preset, disposed on unmount ---- */
+  const bendBark=useRef({uniforms:null}), bendGrass=useRef({uniforms:null});
   const A=useMemo(()=>{
     const treeGeos=makeTreeGeometries();
     const graveGeos=makeGraveGeometries();
@@ -328,6 +346,9 @@ export default function GraveyardScene(){
       path:new THREE.MeshStandardMaterial({map:pathTex,transparent:true,depthWrite:false,roughness:.95,metalness:0,color:'#b0a99d'}),
       grass:new THREE.MeshStandardMaterial({map:grassTex,alphaTest:.45,side:THREE.DoubleSide,roughness:1,metalness:0,color:'#a49e8e'})
     };
+    // shared wind: branch-tip sway + grass bend both bend in the vertex stage
+    applyWindBend(mats.bark, bendBark.current, {ampU:.055, heightY:5, baseY:1.4, weightExp:1.8});
+    applyWindBend(mats.grass, bendGrass.current, {ampU:.075, heightY:1, baseY:0, uvHeight:true, weightExp:2});
     return {treeGeos,graveGeos,moundGeo,rockGeo,grassGeo,groundGeo,pathGeo,groundTex,pathTex,grassTex,softTex,moonTex,barkTex,mats};
   },[]);
   useEffect(()=>()=>{
@@ -336,6 +357,7 @@ export default function GraveyardScene(){
     [A.moundGeo,A.rockGeo,A.grassGeo,A.groundGeo,A.pathGeo].forEach(g=>g.dispose());
     [A.groundTex.color,A.groundTex.rough,A.pathTex,A.grassTex,A.softTex,A.moonTex,A.barkTex].forEach(t=>t.dispose());
     Object.values(A.mats).forEach(m=>m.dispose());
+    clearBendShaders();
   },[A]);
 
   /* ---------------------------------------------------------------- *
@@ -492,7 +514,7 @@ export default function GraveyardScene(){
     scene.fog=new THREE.FogExp2(FOG_COLOR,FOG_DENSITY);
     if(import.meta.env.DEV){
       // dev-only inspection hook used by the browser audit
-      window.__MAFIAS__={camera,scene,renderer:gl,get progress(){return scrollCurrent.current;},get target(){return scrollTarget.current;}};
+      window.__MAFIAS__={camera,scene,renderer:gl,get progress(){return scrollCurrent.current;},get target(){return scrollTarget.current;},get storm(){return stormApi.current;}};
     }
     const enter=()=>{
       diving.current=true;
@@ -523,6 +545,8 @@ export default function GraveyardScene(){
   },[camera,scene,gl]);
 
   useFrame(({pointer,clock},delta)=>{
+    const t=clock.elapsedTime;
+    updateWind(t); // shared time source: bark + grass bend shaders
     scrollCurrent.current=THREE.MathUtils.damp(scrollCurrent.current,scrollTarget.current,3.2,delta);
     const p=scrollCurrent.current;
     if(!diving.current){
@@ -556,9 +580,11 @@ export default function GraveyardScene(){
       <Instances key={`g${i}`} geometry={A.graveGeos[i]} material={A.mats.stone} data={data} castShadow receiveShadow colors/>)}
     <Instances geometry={A.moundGeo} material={A.mats.soil} data={moundData} receiveShadow colors/>
 
+    <Ghosts treeGeos={A.treeGeos} treeDefs={treeDefs}/>
     <Moon soft={A.softTex} moonTex={A.moonTex}/>
     <Haze soft={A.softTex}/>
     <Portal refObj={portal}/>
+    <Storm apiRef={stormApi} soft={A.softTex}/>
     <Smoke/>
     {bats.map((b,i)=><Bat key={i} {...b}/>)}
     <Sparkles count={Q.sparks} scale={[15,7,16]} size={1.4} speed={.13} opacity={.24} color="#c32a42" position={[0,1.5,-5]}/>
