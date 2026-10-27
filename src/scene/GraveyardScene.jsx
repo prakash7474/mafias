@@ -342,7 +342,10 @@ export default function GraveyardScene(){
       ground:new THREE.MeshStandardMaterial({map:groundTex.color,roughnessMap:groundTex.rough,roughness:1,metalness:0,color:'#b8b1a5'}),
       path:new THREE.MeshStandardMaterial({map:pathTex,transparent:true,depthWrite:false,roughness:.95,metalness:0,color:'#b0a99d'})
     };
-
+    // shared wind: bark bends in the vertex stage; grass blades use the same
+    // WIND config through their own material (see GrassField.jsx)
+    applyWindBend(mats.bark, bendBark.current, {ampU:WIND.branchAmp, heightY:5.5, baseY:1.5, weightExp:1.8});
+    return {treeGeos,graveGeos,moundGeo,rockGeo,groundGeo,pathGeo,groundTex,pathTex,softTex,moonTex,barkTex,mats};
   },[]);
   useEffect(()=>()=>{
     A.treeGeos.forEach(g=>g.dispose());
