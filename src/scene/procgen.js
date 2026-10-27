@@ -66,33 +66,58 @@ export function buildPathGeometry(width=3.6,len=30,cz=-6){
 }
 
 /* ------------------------------------------------------------------ *
- * Dead trees — frame-transported tapered tubes, recursively branched,
- * merged into ONE BufferGeometry per silhouette (then instanced).
+ * Dead trees — recursive, fractal-inspired construction following the
+ * Codrops / EZ-Tree article ("Fractals to Forests"):
+ *   • a branch carries origin, orientation, length, radius, level,
+ *     section count and segment count
+ *   • sections taper along the branch (taper per level), last section
+ *     collapses to a point
+ *   • gnarliness: per-section random tilt inversely proportional to the
+ *     section radius, so thin branches curl far more than the trunk
+ *   • growth force: each section rotates toward the light with a step of
+ *     strength / radius — thick trunks barely move, twigs reach upward
+ *   • twist: the section frame rolls around the branch axis
+ *   • children spawn at an interpolated point along the parent, evenly
+ *     spaced around it (radial angle + branch angle), shorter and thinner
+ *   • geometry of every branch is frame-transported and merged into ONE
+ *     BufferGeometry per silhouette, then instanced
  * ------------------------------------------------------------------ */
 export function buildTree(seed,opt={}){
   const rng=makeRng(seed*2654435761>>>0);
   const P=[],I=[],U=[],T=[];  // T: outer branch-tip anchors (for hanging props)
+  const pick=(arr,d)=>arr[Math.min(d,arr.length-1)];
   const cfg={
     height:opt.height??6,
     trunkR:opt.trunkR??.3,
-    primaries:opt.primaries??(3+Math.floor(rng()*3)),
-    maxDepth:opt.maxDepth??2,
-    spread:opt.spread??.6,
+    // recursion: level 0 = trunk, children[level] branches per node
+    levels:opt.levels??3,
+    children:opt.children??[4,3,2],
+    start:opt.start??[.3,.32,.34],            // where along a parent children begin
+    angleDeg:opt.angleDeg??[36,44,50],        // child angle vs. parent axis
+    lenScale:opt.lenScale??[.5,.5,.48],       // child length as a fraction of parent
+    radScale:opt.radScale??[.78,.76,.74],     // child radius as a fraction of parent
+    taper:opt.taper??[.5,.48,.45],            // radius lost over one branch
+    gnarl:opt.gnarl??.05,                     // per-section random tilt (rad)
+    twist:opt.twist??.05,                     // per-section roll around the axis (rad)
+    force:opt.force??1.3,                     // growth force toward +Y (scaled by 1/r)
     lean:opt.lean??.15,
-    upTrunk:opt.upTrunk??.55,
     broken:opt.broken??.2,
     radial:opt.radial??6,
+    tipRadial:opt.tipRadial??4,
+    rings:opt.rings??9,                       // sections along the trunk
+    tipRings:opt.tipRings??4,
     warmth:opt.warmth??.6
   };
 
   function grow(o,d,len,r0,depth){
     if(P.length/3>7000)return;
-    const radial=depth===0?cfg.radial:depth===1?Math.max(5,cfg.radial-1):4;
-    const rings=depth===0?9:depth===1?6:4;
-    const terminal=depth>cfg.maxDepth;
+    const radial=depth===0?cfg.radial:depth===1?Math.max(5,cfg.radial-1):cfg.tipRadial;
+    const rings=depth===0?cfg.rings:depth===1?Math.max(4,cfg.rings-3):cfg.tipRings;
+    const terminal=depth>=cfg.levels;
     const broken=!terminal&&rng()<cfg.broken*(depth?1.5:.5);
-    const rEnd=terminal?.006:(broken?r0*.5:r0*(.42+rng()*.18));
-    const upTarget=depth===0?cfg.upTrunk:depth===1?.45:.34;
+    const taper=pick(cfg.taper,depth);
+    // terminal sections collapse toward a point (EZ-Tree sets the last radius to ~0)
+    const rEnd=terminal?.012:(broken?r0*.5:Math.max(.02,r0*(1-taper+(rng()-.5)*.12)));
 
     // walk the spine with a parallel-transported frame
     let p=o.clone(),t=d.clone().normalize();
@@ -102,12 +127,11 @@ export function buildTree(seed,opt={}){
     const sC=[],sT=[],sN=[],sB=[],sR=[];
     const bendTotal=(rng()-.5)*(depth===0?.9:1.35);
     const bendAxis=new THREE.Vector3().crossVectors(t,Math.abs(t.y)<.9?new THREE.Vector3(0,1,0):new THREE.Vector3(1,0,0)).normalize();
-    const wander=new THREE.Vector3();
 
     const start=P.length/3;
     for(let i=0;i<=rings;i++){
       const tt=i/rings;
-      const r=r0+(rEnd-r0)*Math.pow(tt,.85);
+      const r=i===rings?rEnd:r0+(rEnd-r0)*Math.pow(tt,.85);
       sC.push(p.clone());sT.push(t.clone());sN.push(n.clone());sR.push(r);
       const b=new THREE.Vector3().crossVectors(t,n);sB.push(b.clone());
       const flare=depth===0?1+.85*Math.max(0,1-i/1.6):1;
@@ -128,11 +152,18 @@ export function buildTree(seed,opt={}){
           const j2=(j+1)%radial;
           I.push(base+j,base+j2,base+radial+j, base+j2,base+radial+j2,base+radial+j);
         }
-        // advance along the spine
+        // advance along the spine -------------------------------
+        // gnarliness: thinner sections twist far more than thick ones
+        const gnarl=cfg.gnarl*Math.max(1,.55/Math.sqrt(Math.max(r,.02)));
+        t.applyAxisAngle(n,(rng()-.5)*gnarl);
+        t.applyAxisAngle(b,(rng()-.5)*gnarl);
+        // authored curvature of this branch
         t.applyAxisAngle(bendAxis,bendTotal/rings);
-        wander.crossVectors(t,bendAxis).normalize();
-        t.applyAxisAngle(wander,(rng()-.5)*.07);
-        t.y+=(upTarget-t.y)*.12;
+        // growth force: rotate toward the light by ~strength/radius
+        const f=THREE.MathUtils.clamp(cfg.force*.02/Math.max(r,.04),0,.3);
+        t.x*=(1-f);t.z*=(1-f);t.y+=(1-t.y)*f;
+        // twist: roll the section frame around the branch axis
+        n.applyAxisAngle(t,cfg.twist);
         t.normalize();
         n.addScaledVector(t,-n.dot(t));
         if(n.lengthSq()<1e-6)n.set(1,0,0);
@@ -155,26 +186,31 @@ export function buildTree(seed,opt={}){
     if(depth>0&&Math.hypot(p.x,p.z)>1.05)T.push([p.x,p.y+t.y*off,p.z]);
     for(let j=0;j<radial;j++)I.push(cap,last+j,last+(j+1)%radial);
 
-    // children
+    // children (EZ-Tree: origin/interpolation along the parent, radial angle
+    // evenly distributed + jitter, branch angle, shorter and thinner each level)
     if(!broken&&!terminal&&P.length/3<6800){
-      const nKids=depth===0?cfg.primaries:depth===1?(rng()<.7?2:3):(rng()<.5?2:1);
-      const t0=depth===0?.3:.34,span=depth===0?.62:.6;
+      const nKids=Math.max(1,Math.round(pick(cfg.children,depth)+(rng()<.45?1:0)));
+      const startT=pick(cfg.start,depth);
+      const ang=pick(cfg.angleDeg,depth)*Math.PI/180;
+      const radialOffset=rng();
       const used=[];
       for(let k=0;k<nKids;k++){
-        const frac=t0+(k+.2+rng()*.6)/nKids*span;
+        const frac=startT+((k+.15+rng()*.7)/nKids)*(0.97-startT);
         let idx=Math.min(rings,Math.max(1,Math.round(frac*rings)));
         if(used.some(u=>Math.abs(u-idx)<1))idx=Math.min(rings,idx+1);
         used.push(idx);
-        const phi=rng()*Math.PI*2;
+        const phi=2*Math.PI*(radialOffset+k/nKids)+(rng()-.5)*.55;
         const axis=sN[idx].clone().multiplyScalar(Math.cos(phi)).addScaledVector(sB[idx],Math.sin(phi)).normalize();
-        const ang=cfg.spread*(.7+rng()*.75);
-        const cd=sT[idx].clone().applyAxisAngle(axis,ang);
-        cd.y+=(depth===0?.28:.16)+(rng()-.5)*.3;
+        const cd=sT[idx].clone().applyAxisAngle(axis,ang*(.75+rng()*.5));
+        cd.y+=(depth===0?.26:.14)+(rng()-.5)*.3;
         cd.normalize();
-        grow(
-          sC[idx].clone().addScaledVector(cd,-sR[idx]*.3),
-          cd,len*(.42+rng()*.22),sR[idx]*.78,depth+1
-        );
+        const childLen=len*pick(cfg.lenScale,depth)*(.85+rng()*.3);
+        const childR=sR[idx]*pick(cfg.radScale,depth)*(.9+rng()*.2);
+        // reject degenerate / ground-piercing children
+        if(childLen<.2||childR<.013)continue;
+        const origin=sC[idx].clone().addScaledVector(cd,-sR[idx]*.3);
+        if(origin.y<.05&&cd.y<.08)continue;
+        grow(origin,cd,childLen,childR,depth+1);
       }
     }
   }
@@ -217,14 +253,35 @@ function bakeColors(g,{seed=1,warmth=.5,mossy=false,bark=false,height=3}={}){
   g.setAttribute('color',new THREE.BufferAttribute(col,3));
 }
 
+/* Eight archetypes — never the same silhouette twice. The last two are
+ * low-detail variants (fewer radial sides / sections) meant for the far
+ * background, where the silhouette matters and the triangles do not. */
 export function makeTreeGeometries(){
   return [
-    {seed:11,height:7.4,trunkR:.35,primaries:4,lean:.14,broken:.24,spread:.62,warmth:.7,radial:7},
-    {seed:23,height:6.2,trunkR:.30,primaries:3,lean:.30,broken:.32,spread:.5,warmth:.4},
-    {seed:37,height:5.4,trunkR:.26,primaries:5,lean:.06,broken:.16,spread:.78,warmth:.85},
-    {seed:52,height:6.9,trunkR:.33,primaries:4,lean:.34,broken:.36,spread:.55,warmth:.3},
-    {seed:68,height:4.5,trunkR:.22,primaries:3,lean:.22,broken:.42,spread:.82,warmth:.6},
-    {seed:81,height:8.2,trunkR:.38,primaries:5,lean:.09,broken:.2,spread:.6,warmth:.5,radial:7}
+    // tall twisted foreground tree
+    {seed:11,height:7.6,trunkR:.36,children:[4,3,2],start:[.28,.32,.34],angleDeg:[34,42,48],
+     taper:[.5,.48,.44],gnarl:.055,twist:.07,force:1.5,lean:.12,broken:.2,warmth:.7,radial:7,rings:10},
+    // leaning dead tree
+    {seed:23,height:6.2,trunkR:.30,children:[3,3,2],start:[.34,.3,.36],angleDeg:[46,52,56],
+     taper:[.55,.5,.46],gnarl:.07,twist:.09,force:.55,lean:.32,broken:.32,warmth:.4,radial:6},
+    // broken crown, dense low branching
+    {seed:37,height:5.4,trunkR:.26,children:[5,3,2],start:[.26,.3,.34],angleDeg:[40,48,54],
+     taper:[.48,.46,.42],gnarl:.05,twist:.05,force:1.35,lean:.06,broken:.42,warmth:.85},
+    // sparse distant silhouette
+    {seed:52,height:6.9,trunkR:.33,children:[3,2],levels:2,start:[.36,.34],angleDeg:[44,52],
+     taper:[.54,.5],gnarl:.06,twist:.06,force:.9,lean:.3,broken:.36,warmth:.3,radial:5,rings:7,tipRings:3},
+    // short gnarled storm-broken tree
+    {seed:68,height:4.6,trunkR:.24,children:[4,3,2],start:[.3,.34,.36],angleDeg:[52,56,60],
+     taper:[.52,.5,.46],gnarl:.085,twist:.1,force:.85,lean:.22,broken:.45,warmth:.6},
+    // long lateral branches that frame the camera
+    {seed:81,height:8.2,trunkR:.38,children:[5,4,2],start:[.2,.28,.34],angleDeg:[74,68,58],
+     lenScale:[.66,.58,.5],radScale:[.8,.76,.72],taper:[.5,.46,.44],
+     gnarl:.045,twist:.05,force:.8,lean:.1,broken:.16,warmth:.5,radial:7,rings:10},
+    // far background (low detail)
+    {seed:97,height:7.2,trunkR:.34,children:[3,2],levels:2,start:[.34,.32],angleDeg:[42,50],
+     taper:[.54,.5],gnarl:.06,twist:.06,force:1.1,lean:.18,broken:.3,warmth:.4,radial:5,rings:6,tipRadial:4,tipRings:3},
+    {seed:103,height:6.4,trunkR:.3,children:[3,2],levels:2,start:[.32,.34],angleDeg:[48,46],
+     taper:[.52,.48],gnarl:.07,twist:.08,force:.7,lean:.26,broken:.34,warmth:.35,radial:5,rings:6,tipRadial:4,tipRings:3}
   ].map(v=>buildTree(v.seed,v));
 }
 
@@ -348,26 +405,6 @@ export function makeRockGeometry(){
   const g=new THREE.IcosahedronGeometry(.1,0);
   weather(g,.03);
   bakeColors(g,{seed:41,warmth:.5,mossy:true});
-  return g;
-}
-
-/* Two crossed quads — cheap instanced dead-grass tufts. */
-export function makeGrassGeometry(){
-  const pos=[],uv=[],idx=[];
-  const push=(nx)=>{
-    const b=pos.length/3;
-    const h=.72;
-    if(nx){pos.push(0,0,-.5, 0,0,.5, 0,h,.5, 0,h,-.5);}
-    else{pos.push(-.5,0,0, .5,0,0, .5,h,0, -.5,h,0);}
-    uv.push(0,0,1,0,1,1,0,1);
-    idx.push(b,b+1,b+2,b,b+2,b+3);
-  };
-  push(false);push(true);
-  const g=new THREE.BufferGeometry();
-  g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));
-  g.setAttribute('uv',new THREE.Float32BufferAttribute(uv,2));
-  g.setIndex(idx);
-  g.computeVertexNormals();
   return g;
 }
 
@@ -503,29 +540,6 @@ export function makePathTexture(w=256,h=1024,seed=19){
   const t=new THREE.CanvasTexture(c);
   t.colorSpace=THREE.SRGBColorSpace;
   t.anisotropy=4;
-  return t;
-}
-
-export function makeGrassTexture(size=128,seed=29){
-  const rng=makeRng(seed);
-  const c=document.createElement('canvas');c.width=c.height=size;
-  const ctx=c.getContext('2d');
-  ctx.clearRect(0,0,size,size);
-  ctx.lineCap='round';
-  for(let i=0;i<26;i++){
-    const x0=6+rng()*(size-12);
-    const h=size*(.45+rng()*.5);
-    const lean=(rng()-.5)*46;
-    const w=2.2+rng()*2.6;
-    ctx.strokeStyle=rng()<.45?'#8a8152':rng()<.6?'#6d6742':'#565238';
-    ctx.lineWidth=w;
-    ctx.beginPath();
-    ctx.moveTo(x0,size);
-    ctx.quadraticCurveTo(x0+lean*.35,size-h*.55,x0+lean,size-h);
-    ctx.stroke();
-  }
-  const t=new THREE.CanvasTexture(c);
-  t.colorSpace=THREE.SRGBColorSpace;
   return t;
 }
 

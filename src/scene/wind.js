@@ -10,13 +10,28 @@ import * as THREE from 'three';
  * ------------------------------------------------------------------ */
 export const WIND = {
   dir: new THREE.Vector2(0.85, 0.5).normalize(), // coherent wind direction
-  base: 1.0,        // base strength multiplier
-  gust: 0.5,        // gust amplitude (strength oscillates base ± gust*0.5)
-  windSF:0.06,      // gust evolution frequency
-  ghostAmp: 0.085,  // rad — max ghost pendulum angle
-  branchAmp: 0.055, // world units — max branch-tip displacement
-  grassAmp: 0.075   // world units — max grass-tip displacement
+  speed: 0.55,     // shared oscillation speed (uTime multiplier)
+  base: 1.0,       // base strength multiplier
+  gust: 0.5,       // gust amplitude (strength oscillates base ± gust*0.5)
+  windSF:0.06,     // gust evolution frequency
+  ghostAmp: 0.085, // rad — max ghost pendulum angle
+  branchAmp: 0.07, // world units — max branch-tip displacement
+  grassAmp: 0.16,  // world units — max grass-tip displacement
+  grassSpeed: 0.62 // grass sway evolution frequency
 };
+
+/* Shared GLSL: every wind consumer (bark bend, grass blades) computes the
+ * same per-origin phase and the same global gust, so branches, grass and
+ * the JS-side ghosts stay in sync without sharing material instances. */
+export const WIND_GLSL = `
+  float windPhase(vec2 origin){
+    return fract(sin(dot(origin, vec2(12.9898,78.233))) * 43758.5453) * 6.28318;
+  }
+  float windGust(float t, float phase){
+    float gt = t * ${WIND.speed.toFixed(3)} + phase * 0.12;
+    return 0.55 + 0.45 * sin(gt) * sin(gt * 1.63 + 2.1);
+  }
+`;
 
 /* Smooth deterministic gust factor in [0,1]: sum of incommensurate sines.
  * Global — every consumer shares it, so wind feels coherent. */
@@ -39,6 +54,12 @@ export function makeBendUniforms(ref){
 
 /* Registry of live bend shaders; one useFrame call updates all of them. */
 const bendShaders = [];
+
+/* Extra shader (e.g. the grass blade material) that owns its uniforms but
+ * wants the shared clock. Safe to call more than once per shader. */
+export function registerWindShader(shader){
+  if(shader && !bendShaders.includes(shader)) bendShaders.push(shader);
+}
 
 /* Inject wind bend into a MeshStandardMaterial's vertex stage.
  * opts:
@@ -63,11 +84,7 @@ export function applyWindBend(material, ref, {ampU, heightY=5, baseY=1.2, uvHeig
         uniform float uTime; uniform vec2 uWind; uniform float uAmp;
         uniform float uHeight; uniform float uBase; uniform float uExp;
         uniform float uUvMode;
-
-        /* deterministic per-instance phase: hash of the instance origin */
-        float windPhase(vec2 origin){
-          return fract(sin(dot(origin, vec2(12.9898,78.233))) * 43758.5453) * 6.28318;
-        }`)
+${WIND_GLSL}`)
       .replace('#include <project_vertex>', `
         /* ---- wind displacement (world space, before projection) ---- */
         vec4 iOrigin = vec4(0.0);
@@ -76,12 +93,12 @@ export function applyWindBend(material, ref, {ampU, heightY=5, baseY=1.2, uvHeig
         #endif
         float ph = windPhase(iOrigin.xz + vec2(0.0, iOrigin.y*0.7));
 
-        /* shared global gust + a small per-instance desync */
-        float gt = uTime*0.55 + ph*0.12;
-        float gustF = 0.55 + 0.45*sin(gt)*sin(gt*1.63+2.1);
         float hFactor = uUvMode > 0.5 ? clamp(uv.y, 0.0, 1.0)
                                       : clamp((transformed.y - uBase) / max(uHeight - uBase, 0.001), 0.0, 1.0);
         hFactor = pow(hFactor, uExp);
+
+        /* shared global gust; thin tips flutter a touch faster than the trunk */
+        float gustF = windGust(uTime * (0.72 + 0.28 * hFactor), ph);
         float side = 0.78 + 0.22*sin(ph*2.7 + uTime*0.8);   // per-object strength variation
         vec4 localPos = vec4(transformed, 1.0);
         #ifdef USE_INSTANCING
@@ -94,6 +111,7 @@ export function applyWindBend(material, ref, {ampU, heightY=5, baseY=1.2, uvHeig
         gl_Position = projectionMatrix * mvPosition;
       `);
     bendShaders.push(shader);
+    material.userData.windShader = shader;   // dev/inspection hook
   };
   material.customProgramCacheKey = ()=>`windbend-${ampU}-${heightY}-${baseY}-${uvHeight?1:0}-${weightExp}`;
 }

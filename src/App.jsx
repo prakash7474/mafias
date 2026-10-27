@@ -24,7 +24,7 @@ export default function App(){
   const [ready, setReady]=useState(false);
   const [introDone,setIntroDone]=useState(false);
   const [scrollProgress,setScrollProgress]=useState(0);
-  const drone=useRef(null), whoosh=useRef(null), overlay=useRef(null), enterBtn=useRef(null);
+  const drone=useRef(null), whoosh=useRef(null), overlay=useRef(null), enterBtn=useRef(null), duckT=useRef(null);
   useEffect(()=>{
     drone.current=new Howl({
       src:['/audio/Danny_Elfman_Wednesday_OST_-_Wednesday_Main_Titles_2022_(mp3.pm).mp3','/audio/dark-drone.mp3'],
@@ -46,6 +46,21 @@ export default function App(){
     const next=!flashesOn;setFlashesOn(next);
     stormSettings.flashes=next;
   },[flashesOn]);
+  /* Thunder rumble (one-shot, ~100 ms after the flash) briefly ducks the
+     background track so it cuts through the mix, then restores the exact
+     authored volume. Nothing loops and no React state is touched. */
+  useEffect(()=>{
+    const BASE=.24,LOW=.12,RESTORE=1.6;
+    const duck=()=>{
+      const d=drone.current;
+      if(!d)return;
+      d.volume(LOW);
+      clearTimeout(duckT.current);
+      duckT.current=setTimeout(()=>{if(drone.current)drone.current.volume(BASE);},RESTORE*1000);
+    };
+    window.addEventListener('mafias:thunder',duck);
+    return ()=>{window.removeEventListener('mafias:thunder',duck);clearTimeout(duckT.current);};
+  },[]);
   const enter=useCallback(()=>{
     if(entering||entered)return;
     setEntering(true);if(soundOn)whoosh.current?.play();

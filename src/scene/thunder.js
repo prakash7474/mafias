@@ -25,6 +25,35 @@ export class ThunderPlayer {
     this.clock = 0;            // seconds, fed by the shared frame loop
     this.maxVoices = 2;
     this.gap = .9;             // never fire thunder on top of fresh thunder
+    this.thunderRaw = null;    // fetched public/audio/thunder.mp3
+    this.thunderBuffer = null; // decoded recording (synth stays as fallback)
+    this._decoding = false;
+    this._preloading = false;
+    this._preload();
+  }
+
+  /* Fetch the thunder recording early. Nothing plays until SOUND is on:
+     the buffer is only decoded once the AudioContext exists (i.e. after the
+     visitor's gesture). If the file is missing the synthesised rumble stays. */
+  _preload(){
+    if(this._preloading || typeof fetch !== 'function') return;
+    this._preloading = true;
+    fetch('/audio/thunder.mp3')
+      .then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('missing'))))
+      .then(ab => { this.thunderRaw = ab; if(this.ctx) this._decode(); })
+      .catch(() => { this.thunderRaw = null; });
+  }
+
+  _decode(){
+    if(!this.ctx || !this.thunderRaw || this.thunderBuffer || this._decoding) return;
+    this._decoding = true;
+    const raw = this.thunderRaw.slice(0);   // decodeAudioData detaches its input
+    const done = () => { this._decoding = false; };
+    try{
+      this.ctx.decodeAudioData(raw)
+        .then(buf => { this.thunderBuffer = buf; done(); })
+        .catch(() => { this.thunderRaw = null; done(); });
+    }catch(e){ done(); }
   }
 
   /* Lazily build the audio graph. Call only from a user gesture path. */
@@ -59,6 +88,7 @@ export class ThunderPlayer {
     if(next){
       if(!this._ensure()){ this.enabled = false; return; }
       if(this.ctx.state === 'suspended') this.ctx.resume().catch(() => {});
+      this._decode();
     }else{
       this.pending.length = 0;
       if(this.master){
@@ -74,7 +104,7 @@ export class ThunderPlayer {
      visitor is never left waiting. */
   queue(delaySeconds, { km = 1, strength = 1 } = {}){
     if(!this.enabled || !this.ctx) return;
-    const d = clamp(delaySeconds, .15, THUNDER_DELAY_CAP + .5);
+    const d = clamp(delaySeconds, .05, THUNDER_DELAY_CAP + .5);
     this.pending.push({ due: this.clock + d, km, strength });
   }
 
@@ -101,6 +131,60 @@ export class ThunderPlayer {
     if(ctx.state !== 'running'){ ctx.resume && ctx.resume().catch(() => {}); if(ctx.state === 'closed') return; }
     const near = clamp(1 - km / 2.6, 0, 1);        // 1 = right overhead
     const t0 = ctx.currentTime + .02;
+    // prefer the real recording (public/audio/thunder.mp3), shaped by distance
+    if(this.thunderBuffer){
+      this._playRecording({ ctx, t0, near, strength });
+      this._announce({ km, strength });
+      return;
+    }
+    this._playSynth({ ctx, t0, near, strength });
+    this._announce({ km, strength });
+  }
+
+  /* One-shot playback of the supplied recording: never loops, exactly one
+     voice per strike event. Distance shapes rate, gain and brightness. */
+  _playRecording({ ctx, t0, near, strength }){
+    const buf = this.thunderBuffer;
+    const rate = .8 + near * .35;                 // distant thunder is deeper
+    const dur = buf.duration / rate;
+    const peak = clamp((.3 + near * .5) * strength, .08, .85);
+
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    src.loop = false;                              // heard once — never loops
+    src.playbackRate.value = rate;
+
+    const lp = ctx.createBiquadFilter();
+    lp.type = 'lowpass';
+    lp.frequency.value = 700 + near * 3200;        // distant rolls are muffled
+    lp.Q.value = .5;
+
+    const g = ctx.createGain();
+    g.gain.setValueAtTime(.0001, t0);
+    // close strikes crack fast, distant ones swell in
+    g.gain.exponentialRampToValueAtTime(peak, t0 + .02 + (1 - near) * .3);
+    g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+
+    src.connect(lp).connect(g).connect(this.master);
+    src.start(t0);
+    src.stop(t0 + dur + .05);
+    this.voices++;
+    src.onended = () => { this.voices = Math.max(0, this.voices - 1); };
+  }
+
+  /* One event → one playback announcement, so the background track ducks
+     once per strike and nothing double-fires on the follow-up flickers. */
+  _announce({ km, strength }){
+    /* One-shot rumble: every voice is scheduled with explicit start/stop
+       times, so a strike is heard exactly once — nothing loops. Announce it
+       once so the background track can duck underneath the rumble. */
+    this.played++;
+    if(typeof window !== 'undefined'){
+      try{ window.dispatchEvent(new CustomEvent('mafias:thunder', { detail: { km, strength } })); }catch(e){}
+    }
+  }
+
+  _playSynth({ ctx, t0, near, strength }){
     const peak = clamp((.16 + near * .4) * strength, .05, .6);
     const dur = 2.4 + (1 - near) * 2.2;
 
@@ -159,7 +243,6 @@ export class ThunderPlayer {
       c.start(t0);
       c.stop(t0 + .3);
     }
-    this.played++;
   }
 
   dispose(){
@@ -171,5 +254,7 @@ export class ThunderPlayer {
     this.ctx = null;
     this.master = null;
     this.noise = null;
+    this.thunderRaw = null;
+    this.thunderBuffer = null;
   }
 }

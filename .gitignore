@@ -1,2 +1,8 @@
 node_modules
-*audit-temp/
+dist/
+audit-tmp/
+*.log
+*.json
+*.jpg
+*.mjs
+*.map

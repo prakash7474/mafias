@@ -6,12 +6,15 @@ import { gsap } from 'gsap';
 import {
   makeRng, groundBase, buildGroundGeometry, buildPathGeometry,
   makeTreeGeometries, makeGraveGeometries, makeMoundGeometry, makeRockGeometry,
-  makeGrassGeometry, makeGroundTextures, makePathTexture, makeGrassTexture,
+  makeGroundTextures, makePathTexture,
   makeSoftTexture, makeMoonTexture, makeBarkTexture
 } from './procgen.js';
-import { applyWindBend, updateWind, clearBendShaders } from './wind.js';
+import GrassField from './GrassField.jsx';
+import { applyWindBend, updateWind, clearBendShaders, WIND } from './wind.js';
 import Ghosts from './Ghosts.jsx';
 import Storm from './Storm.jsx';
+import CloudSky from './CloudSky.jsx';
+import SkullStatue from '../components/SkullStatue.jsx';
 import { stormState } from './lightning.js';
 
 const isSmall=()=>typeof window!=='undefined'&&window.innerWidth<700;
@@ -21,8 +24,8 @@ const MOBILE=isSmall();
 /* Quality preset: fewer lights/shadows/particles and a smaller key shadow
    map on phones, full treatment on desktop. */
 const Q=MOBILE
-  ?{shadow:1024,spotShadows:false,spots:2,graveRows:18,backGraves:8,trees:11,grass:70,rocks:70,sparks:35,groundSeg:64,redAccent:false}
-  :{shadow:2048,spotShadows:true,spots:3,graveRows:26,backGraves:14,trees:17,grass:240,rocks:150,sparks:70,groundSeg:96,redAccent:true};
+  ?{shadow:1024,spotShadows:false,spots:2,graveRows:18,backGraves:8,trees:11,blades:4200,rocks:70,sparks:35,groundSeg:64,redAccent:false}
+  :{shadow:2048,spotShadows:true,spots:3,graveRows:26,backGraves:14,trees:17,blades:12000,rocks:150,sparks:70,groundSeg:96,redAccent:true};
 
 // Scroll-driven camera path: z = CAM_START + CAM_TRAVEL * progress (travel is negative).
 const CAM_START=12, CAM_TRAVEL=-18, LOOK_Y0=1.4, LOOK_Y1=.7, LOOK_Z0=-4, LOOK_Z1=-6;
@@ -323,18 +326,16 @@ export default function GraveyardScene(){
   const stormApi=useRef(null);
 
   /* ---- shared assets: built once per quality preset, disposed on unmount ---- */
-  const bendBark=useRef({uniforms:null}), bendGrass=useRef({uniforms:null});
+  const bendBark=useRef({uniforms:null});
   const A=useMemo(()=>{
     const treeGeos=makeTreeGeometries();
     const graveGeos=makeGraveGeometries();
     const moundGeo=makeMoundGeometry();
     const rockGeo=makeRockGeometry();
-    const grassGeo=makeGrassGeometry();
     const groundGeo=buildGroundGeometry(80,Q.groundSeg);
     const pathGeo=buildPathGeometry();
     const groundTex=makeGroundTextures(1024,7);
     const pathTex=makePathTexture(256,1024,19);
-    const grassTex=makeGrassTexture(128,29);
     const softTex=makeSoftTexture();
     const moonTex=makeMoonTexture();
     const barkTex=makeBarkTexture();
@@ -343,19 +344,18 @@ export default function GraveyardScene(){
       stone:new THREE.MeshStandardMaterial({color:'#7e7b75',roughness:.86,metalness:0,vertexColors:true}),
       soil:new THREE.MeshStandardMaterial({color:'#443d36',roughness:.96,metalness:0,vertexColors:true}),
       ground:new THREE.MeshStandardMaterial({map:groundTex.color,roughnessMap:groundTex.rough,roughness:1,metalness:0,color:'#b8b1a5'}),
-      path:new THREE.MeshStandardMaterial({map:pathTex,transparent:true,depthWrite:false,roughness:.95,metalness:0,color:'#b0a99d'}),
-      grass:new THREE.MeshStandardMaterial({map:grassTex,alphaTest:.45,side:THREE.DoubleSide,roughness:1,metalness:0,color:'#a49e8e'})
+      path:new THREE.MeshStandardMaterial({map:pathTex,transparent:true,depthWrite:false,roughness:.95,metalness:0,color:'#b0a99d'})
     };
-    // shared wind: branch-tip sway + grass bend both bend in the vertex stage
-    applyWindBend(mats.bark, bendBark.current, {ampU:.055, heightY:5, baseY:1.4, weightExp:1.8});
-    applyWindBend(mats.grass, bendGrass.current, {ampU:.075, heightY:1, baseY:0, uvHeight:true, weightExp:2});
-    return {treeGeos,graveGeos,moundGeo,rockGeo,grassGeo,groundGeo,pathGeo,groundTex,pathTex,grassTex,softTex,moonTex,barkTex,mats};
+    // shared wind: bark bends in the vertex stage; grass blades use the same
+    // WIND config through their own material (see GrassField.jsx)
+    applyWindBend(mats.bark, bendBark.current, {ampU:WIND.branchAmp, heightY:5.5, baseY:1.5, weightExp:1.8});
+    return {treeGeos,graveGeos,moundGeo,rockGeo,groundGeo,pathGeo,groundTex,pathTex,softTex,moonTex,barkTex,mats};
   },[]);
   useEffect(()=>()=>{
     A.treeGeos.forEach(g=>g.dispose());
     A.graveGeos.forEach(g=>g.dispose());
-    [A.moundGeo,A.rockGeo,A.grassGeo,A.groundGeo,A.pathGeo].forEach(g=>g.dispose());
-    [A.groundTex.color,A.groundTex.rough,A.pathTex,A.grassTex,A.softTex,A.moonTex,A.barkTex].forEach(t=>t.dispose());
+    [A.moundGeo,A.rockGeo,A.groundGeo,A.pathGeo].forEach(g=>g.dispose());
+    [A.groundTex.color,A.groundTex.rough,A.pathTex,A.softTex,A.moonTex,A.barkTex].forEach(t=>t.dispose());
     Object.values(A.mats).forEach(m=>m.dispose());
     clearBendShaders();
   },[A]);
@@ -469,21 +469,6 @@ export default function GraveyardScene(){
     return {graveGroups:byV,moundData:mounds};
   },[Q,nearTree]);
 
-  const grassData=useMemo(()=>{
-    const rng=makeRng(101),out=[];
-    let guard=0;
-    while(out.length<Q.grass&&guard++<Q.grass*8){
-      const x=(rng()-.5)*30,z=8-rng()*30;
-      if(Math.abs(x)<1.15)continue;
-      out.push({
-        x,y:groundBase(x,z)-.03,z,ry:rng()*Math.PI,
-        s:[.45+rng()*.75,.5+rng()*.85,.45+rng()*.75],
-        color:new THREE.Color().setHSL(.1+rng()*.06,.18+rng()*.18,.3+rng()*.16)
-      });
-    }
-    return out;
-  },[Q]);
-
   const rockData=useMemo(()=>{
     const rng=makeRng(211),out=[];
     let guard=0;
@@ -495,6 +480,56 @@ export default function GraveyardScene(){
     }
     return out;
   },[Q]);
+
+  /* Grass lives in patches — around tree bases, between the graves, along the
+     graveyard edges, near broken stonework and thinly on the path margins —
+     with a hard mask keeping the camera rail, the trunks and every stone clear. */
+  const grassField=useMemo(()=>{
+    const rng=makeRng(101);
+    const patches=[],blocks=[];
+    // tufts hugging every tree base
+    treeDefs.forEach(d=>{
+      patches.push({x:d.x,z:d.z,r:1.5+1.1*d.s,w:2.4,s:1.05});
+      blocks.push({x:d.x,z:d.z,r:.62*d.s+.34});
+    });
+    // between the tombstones
+    graveGroups.flat().forEach(g=>{
+      blocks.push({x:g.x,z:g.z,r:.4+.42*(g.s??1)});
+      if(rng()<.85)patches.push({x:g.x+(rng()-.5)*1.7,z:g.z+(rng()-.5)*1.7,r:1.35,w:1.5,s:.85+rng()*.45});
+    });
+    // bare mounds: nothing grows through a fresh grave
+    moundData.forEach(m=>blocks.push({x:m.x,z:m.z,r:.62}));
+    // broad, low-density blankets over the cemetery floor (still masked per stone)
+    for(let i=0;i<14;i++){
+      const side=i%2?-1:1;
+      patches.push({x:side*(2.9+rng()*5.5),z:7-rng()*20,r:2.6+rng()*1.8,w:1.1,s:.8+rng()*.5});
+    }
+    // graveyard edges
+    for(let i=0;i<12;i++){
+      const side=i%2?-1:1;
+      patches.push({x:side*(7+rng()*5.5),z:8-rng()*25,r:2.2+rng()*2.2,w:1.5,s:.85+rng()*.5});
+    }
+    // near broken stonework and loose rocks
+    rockData.forEach((r,i)=>{if(i%4===0)patches.push({x:r.x,z:r.z,r:.85,w:.7,s:.8});});
+    // sparse tufts along the path margins
+    for(let i=0;i<10;i++){
+      const side=i%2?-1:1;
+      patches.push({x:side*(2+rng()*.9),z:9-rng()*20,r:1.2,w:.7,s:.7+rng()*.3});
+    }
+    // back field
+    for(let i=0;i<6;i++)patches.push({x:(rng()-.5)*22,z:-13-rng()*6,r:2.6+rng()*2,w:1.3,s:.9+rng()*.4});
+
+    const exclude=(x,z)=>{
+      if(Math.abs(x)<1.75)return true;                 // whole width of the path
+      if(Math.abs(x)>14.5||z>9.5||z<-20)return true;   // outside the graveyard
+      for(let i=0;i<blocks.length;i++){
+        const b=blocks[i],dx=x-b.x,dz=z-b.z;
+        if(dx*dx+dz*dz<b.r*b.r)return true;            // trunks, stones, mounds
+      }
+      return false;
+    };
+    return {patches,exclude,count:Q.blades};
+  },[treeDefs,graveGroups,moundData,rockData,Q]);
 
   const treeGroups=useMemo(()=>{
     const byV={};
@@ -571,8 +606,10 @@ export default function GraveyardScene(){
     <mesh geometry={A.pathGeo} receiveShadow material={A.mats.path}/>
 
     {/* G. ground clutter */}
-    <Instances geometry={A.grassGeo} material={A.mats.grass} data={grassData} colors/>
     <Instances geometry={A.rockGeo} material={A.mats.soil} data={rockData} colors receiveShadow/>
+
+    {/* Phase 3–4: instanced grass blades (ZIP shader, shared wind config) */}
+    <GrassField patches={grassField.patches} exclude={grassField.exclude} count={grassField.count} seed={101}/>
 
     {/* Phase 2–4: instanced dead trees + graveyard stonework */}
     {treeGroups.map((g,i)=><Instances key={`t${i}`} geometry={g.geometry} material={A.mats.bark} data={g.data} castShadow receiveShadow/>)}
@@ -584,7 +621,10 @@ export default function GraveyardScene(){
     <Moon soft={A.softTex} moonTex={A.moonTex}/>
     <Haze soft={A.softTex}/>
     <Portal refObj={portal}/>
+    <SkullStatue />
     <Storm apiRef={stormApi} soft={A.softTex}/>
+    {/* volumetric storm clouds: one EffectComposer, driven by stormState */}
+    <CloudSky/>
     <Smoke/>
     {bats.map((b,i)=><Bat key={i} {...b}/>)}
     <Sparkles count={Q.sparks} scale={[15,7,16]} size={1.4} speed={.13} opacity={.24} color="#c32a42" position={[0,1.5,-5]}/>

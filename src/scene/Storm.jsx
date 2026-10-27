@@ -109,6 +109,12 @@ export default function Storm({ apiRef, soft }){
     ev.thunderDelay = thunderDelayFor(ev.km);
     event.current = ev;
     eventT.current = 0;
+    // public strike info for other systems (clouds, debug hooks):
+    // start time, total duration (incl. follow-up flickers) and distance
+    stormState.startedAt = performance.now() / 1000;
+    stormState.duration = ev.duration;
+    stormState.km = ev.km;
+    stormState.intensity = ev.strength;
     const g = groups.current[ev.bolt];
     if(g){
       g.position.copy(ev.position);
@@ -206,7 +212,10 @@ export default function Storm({ apiRef, soft }){
       eventT.current += envDt;
       env = envelopeAt(event.current, eventT.current);
       strength = event.current.strength;
-      if(eventT.current > event.current.duration){ event.current = null; env = 0; strength = 0; }
+      if(eventT.current > event.current.duration){
+        event.current = null; env = 0; strength = 0;
+        stormState.intensity = 0; stormState.duration = 0;
+      }
     }
 
     const e = env * strength * c.intensity;
