@@ -32,7 +32,6 @@ export const WIND_GLSL = `
     return 0.55 + 0.45 * sin(gt) * sin(gt * 1.63 + 2.1);
   }
 `;
-
 /* Smooth deterministic gust factor in [0,1]: sum of incommensurate sines.
  * Global — every consumer shares it, so wind feels coherent. */
 export function windGust(t){

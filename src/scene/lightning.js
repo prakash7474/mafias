@@ -19,9 +19,6 @@ export const stormState = {
   env: 0,          // 0..1 flash envelope currently in the air
   active: false,   // an event is running
   intensity: 0,    // peak of the running event (0..1, quality-scaled)
-  startedAt: 0,    // seconds (performance clock) when the strike began
-  duration: 0,     // total length of the running event, incl. flickers
-  km: 0,           // apparent distance of the running strike
   position: new THREE.Vector3()
 };
 
@@ -39,17 +36,14 @@ export const STRIKE_REGIONS = [
 /* Scene units → kilometres. Chosen so strikes land around 0.7–1.2 km,
    which maps to a usable thunder delay (see THUNDER_* below). */
 const KM_PER_UNIT = 0.012;
-export const THUNDER_DELAY_BASE = 0.1;  // thunder lands ~100 ms after the flash
-export const THUNDER_DELAY_CAP = 3.2;    // seconds — safety cap
+const KM_PER_SECOND_OF_SOUND = 1 / 3; // ~3 s of light-to-sound lag per km
+export const THUNDER_DELAY_CAP = 3.2;  // seconds — usability cap
 
 export function distanceKm(pos, from){
   return pos.distanceTo(from) * KM_PER_UNIT;
 }
-/* The rumble follows the flash almost immediately (about 100 ms). Apparent
-   distance still shapes the SOUND itself — muffling, length, presence of a
-   crack (see thunder.js) — instead of making the visitor wait for it. */
 export function thunderDelayFor(km){
-  return Math.min(THUNDER_DELAY_CAP, THUNDER_DELAY_BASE + km * .03);
+  return Math.min(THUNDER_DELAY_CAP, km * 3);
 }
 
 /* ------------------------------------------------------------------ *

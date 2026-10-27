@@ -25,35 +25,6 @@ export class ThunderPlayer {
     this.clock = 0;            // seconds, fed by the shared frame loop
     this.maxVoices = 2;
     this.gap = .9;             // never fire thunder on top of fresh thunder
-    this.thunderRaw = null;    // fetched public/audio/thunder.mp3
-    this.thunderBuffer = null; // decoded recording (synth stays as fallback)
-    this._decoding = false;
-    this._preloading = false;
-    this._preload();
-  }
-
-  /* Fetch the thunder recording early. Nothing plays until SOUND is on:
-     the buffer is only decoded once the AudioContext exists (i.e. after the
-     visitor's gesture). If the file is missing the synthesised rumble stays. */
-  _preload(){
-    if(this._preloading || typeof fetch !== 'function') return;
-    this._preloading = true;
-    fetch('/audio/thunder.mp3')
-      .then(r => (r.ok ? r.arrayBuffer() : Promise.reject(new Error('missing'))))
-      .then(ab => { this.thunderRaw = ab; if(this.ctx) this._decode(); })
-      .catch(() => { this.thunderRaw = null; });
-  }
-
-  _decode(){
-    if(!this.ctx || !this.thunderRaw || this.thunderBuffer || this._decoding) return;
-    this._decoding = true;
-    const raw = this.thunderRaw.slice(0);   // decodeAudioData detaches its input
-    const done = () => { this._decoding = false; };
-    try{
-      this.ctx.decodeAudioData(raw)
-        .then(buf => { this.thunderBuffer = buf; done(); })
-        .catch(() => { this.thunderRaw = null; done(); });
-    }catch(e){ done(); }
   }
 
   /* Lazily build the audio graph. Call only from a user gesture path. */

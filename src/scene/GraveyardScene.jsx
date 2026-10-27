@@ -9,12 +9,7 @@ import {
   makeGroundTextures, makePathTexture,
   makeSoftTexture, makeMoonTexture, makeBarkTexture
 } from './procgen.js';
-import GrassField from './GrassField.jsx';
-import { applyWindBend, updateWind, clearBendShaders, WIND } from './wind.js';
-import Ghosts from './Ghosts.jsx';
-import Storm from './Storm.jsx';
-import CloudSky from './CloudSky.jsx';
-import SkullStatue from '../components/SkullStatue.jsx';
+
 import { stormState } from './lightning.js';
 
 const isSmall=()=>typeof window!=='undefined'&&window.innerWidth<700;
@@ -327,6 +322,7 @@ export default function GraveyardScene(){
 
   /* ---- shared assets: built once per quality preset, disposed on unmount ---- */
   const bendBark=useRef({uniforms:null});
+  const bendGrass=useRef({uniforms:null});
   const A=useMemo(()=>{
     const treeGeos=makeTreeGeometries();
     const graveGeos=makeGraveGeometries();
@@ -346,10 +342,7 @@ export default function GraveyardScene(){
       ground:new THREE.MeshStandardMaterial({map:groundTex.color,roughnessMap:groundTex.rough,roughness:1,metalness:0,color:'#b8b1a5'}),
       path:new THREE.MeshStandardMaterial({map:pathTex,transparent:true,depthWrite:false,roughness:.95,metalness:0,color:'#b0a99d'})
     };
-    // shared wind: bark bends in the vertex stage; grass blades use the same
-    // WIND config through their own material (see GrassField.jsx)
-    applyWindBend(mats.bark, bendBark.current, {ampU:WIND.branchAmp, heightY:5.5, baseY:1.5, weightExp:1.8});
-    return {treeGeos,graveGeos,moundGeo,rockGeo,groundGeo,pathGeo,groundTex,pathTex,softTex,moonTex,barkTex,mats};
+
   },[]);
   useEffect(()=>()=>{
     A.treeGeos.forEach(g=>g.dispose());
