@@ -19,6 +19,7 @@
     "postprocessing": "^6.39.5",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
+    "react-router-dom": "^7.18.5",
     "react-smoke": "^1.2.0",
     "three": "^0.175.0"
   },

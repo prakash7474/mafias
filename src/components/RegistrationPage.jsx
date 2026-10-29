@@ -1,0 +1,127 @@
+import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
+import FlyingBats from './effects/FlyingBats.jsx';
+import RegistrationSmoke from './RegistrationSmoke.jsx';
+import RegistrationForm from './RegistrationForm.jsx';
+import CharacterPreview from './CharacterPreview.jsx';
+
+const PAGE_WELCOME = 'WELCOME TO REALITY';
+const PAGE_SUBHEAD = 'JOIN THE INNER CIRCLE';
+const PAGE_COPY =
+  'Every legacy begins with a name. Claim your place among the shadows.';
+
+const prefersReduced = () =>
+  typeof window !== 'undefined' &&
+  window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+export default function RegistrationPageInner() {
+  const navigate = useNavigate();
+  const shellRef = useRef(null);
+  const frameRef = useRef(0);
+  const reduced = useMemo(() => prefersReduced(), []);
+  const compact = useMemo(() => typeof window !== 'undefined' && window.innerWidth < 820, []);
+
+  const [mounted, setMounted] = useState(false);
+  const [visible, setVisible] = useState(reduced);
+
+  useEffect(() => {
+    setMounted(true);
+    if (reduced) return;
+    const t = performance.now();
+    const step = () => {
+      const p = Math.min(1, (performance.now() - t) / 650);
+      setVisible(p > 0.5);
+      frameRef.current = requestAnimationFrame(step);
+    };
+    frameRef.current = requestAnimationFrame(step);
+    return () => {
+      if (frameRef.current) cancelAnimationFrame(frameRef.current);
+    };
+  }, [reduced]);
+
+  const handleBack = useCallback(() => {
+    navigate(-1);
+  }, [navigate]);
+
+  useEffect(() => {
+    const onHash = () => navigate('/register', { replace: true });
+    window.addEventListener('mafias:stop-audio', onHash);
+    return () => window.removeEventListener('mafias:stop-audio', onHash);
+  }, [navigate]);
+
+  return (
+    <div
+      ref={shellRef}
+      className="registration-page"
+      style={
+        mounted
+          ? reduced
+            ? { opacity: 1 }
+            : { opacity: visible ? 1 : 0, transition: 'opacity .55s ease' }
+          : { opacity: 0 }
+      }
+    >
+      <FlyingBats className="registration-bats" />
+      <RegistrationSmoke
+        className={
+          (reduced || compact) ? 'registration-smoke reg-smoke-compact' : 'registration-smoke'
+        }
+      />
+      <div className="registration-fog" aria-hidden="true" />
+
+      <header className="registration-topbar">
+        <button
+          className="registration-topbar__back"
+          onClick={handleBack}
+          type="button"
+          aria-label="Return to MAFIAS home"
+        >
+          <span className="registration-topbar__back-mark" aria-hidden="true" />
+          <span className="registration-topbar__back-label">RETURN TO MAFIAS</span>
+        </button>
+        <a href="/" className="registration-topbar__mark" onClick={(e) => {
+          e.preventDefault();
+          if (compact) {
+            window.history.replaceState(null, '', '/register');
+          }
+        }}>
+          MΛFIΛS
+        </a>
+        <span className="registration-topbar__spacer" aria-hidden="true" />
+        <span className="registration-topbar__tag">CEG · GUINDY</span>
+      </header>
+
+      <section className="registration-stage">
+        <div className="registration-copy">
+          <p className="registration-eyebrow">
+            <span aria-hidden="true" />
+            THE INNER CIRCLE
+            <span aria-hidden="true" />
+          </p>
+          <h1 className="registration-title">{PAGE_WELCOME}</h1>
+          <h2 className="registration-subhead">{PAGE_SUBHEAD}</h2>
+          <p className="registration-lead">{PAGE_COPY}</p>
+        </div>
+
+        <div className="registration-layout">
+          <section className="registration-form-panel">
+            <h2 className="registration-panel-title">CLAIM YOUR PLACE</h2>
+            <RegistrationForm />
+          </section>
+
+          <section
+            className="registration-preview-panel"
+            aria-label="Vampire character preview"
+          >
+            <CharacterPreview />
+          </section>
+        </div>
+      </section>
+
+      <footer className="registration-foot">
+        <span>MAFIAS • CEG</span>
+        <span>JOIN THE SHADOWS ↓</span>
+      </footer>
+    </div>
+  );
+}

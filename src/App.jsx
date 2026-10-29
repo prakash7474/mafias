@@ -2,10 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { gsap } from 'gsap';
 import { Howl, Howler } from 'howler';
+import { useNavigate } from 'react-router-dom';
 import GraveyardScene from './scene/GraveyardScene.jsx';
 import { stormSettings } from './scene/lightning.js';
 import { introSmoke, mountIntroSmoke, unmountIntroSmoke } from './scene/introSmoke.js';
 import { warmIntroSmokeAssets } from './scene/IntroSmoke.jsx';
+import RegistrationSmoke from './components/RegistrationSmoke.jsx';
 
 /* The edited 4.2 s swoosh. Served from /public, never from a CDN, and always
    started from zero on the click. If the file is absent the entrance still
@@ -42,12 +44,15 @@ function prefersReduced(){
 }
 
 export default function App(){
+  const navigate = useNavigate();
   const [webgl]=useState(supportsWebGL);
   const [soundOn,setSoundOn]=useState(false);
   const [flashesOn,setFlashesOn]=useState(true);
   const [introState,setIntroState]=useState(PHASE.IDLE);
   const [ready,setReady]=useState(false);
   const [scrollProgress,setScrollProgress]=useState(0);
+  const [showRegister,setShowRegister]=useState(false);
+  const [batsFlying,setBatsFlying]=useState(false);
 
   const entering=introState!==PHASE.IDLE&&introState!==PHASE.COMPLETE;
   const entered=introState===PHASE.COMPLETE;
@@ -393,6 +398,24 @@ export default function App(){
     return ()=>window.removeEventListener('mafias:enter-auto',auto);
   },[enter]);
 
+  useEffect(()=>{
+    if(introState === PHASE.LOGO || entered){
+      const t = setTimeout(()=>setShowRegister(true), 1500);
+      return ()=>clearTimeout(t);
+    }else{
+      setShowRegister(false);
+    }
+  },[introState, entered]);
+
+  const handleRegisterClick = useCallback((e)=>{
+    e.preventDefault();
+    if(batsFlying) return;
+    setBatsFlying(true);
+    setTimeout(()=>{
+      navigate('/register');
+    }, 500);
+  },[batsFlying, navigate]);
+
   /* Scroll owns the hero/footer opacity only *before* the entrance starts.
      From the first click GSAP owns them, so React must stop writing those
      inline styles — a phase-change re-render used to snap the footer (and
@@ -441,7 +464,34 @@ export default function App(){
       <span ref={logoScrimRef} className="logo-intro__scrim" aria-hidden="true"/>
       <span ref={logoGlowRef} className="logo-intro__glow" aria-hidden="true"/>
       <img ref={logoRef} src={LOGO_SRC} alt="MAFIAS distressed skull logo" width="720" height="720" decoding="async"/>
-      <p>SCROLL TO DESCEND</p>
+      <nav className="logo-intro__actions" aria-label="After the MAFIAS reveal">
+        <span className="logo-intro__tagline">ENTER THE INNER CIRCLE</span>
+        {showRegister && (
+          <div className="logo-intro__register-wrap" style={{position:'relative',marginTop:'18px'}}>
+            <RegistrationSmoke className="logo-intro__smoke logo-intro__smoke--button" />
+            <button onClick={handleRegisterClick} className="register-cta" disabled={batsFlying}>
+              <span className="register-cta__line">REGISTER</span>
+              <span className="register-cta__accent" aria-hidden="true" />
+            </button>
+            {batsFlying && (
+              <div className="logo-bats-fly" aria-hidden="true">
+                {[...Array(6)].map((_,i)=>(
+                  <span key={i} className="logo-bat" style={{
+                    '--i': i,
+                    animationDelay: (i*0.08)+'s'
+                  }}>
+                    <svg viewBox="0 0 120 60" width="60" height="30">
+                      <path d="M60 30 L30 18 L48 22 L22 12 L50 24 L78 24 L62 36 L44 34 Z" fill="#050509" stroke="#020204" strokeWidth="1.2"/>
+                      <path d="M60 30 L90 18 L72 22 L98 12 L70 24 L42 24 L58 36 L76 34 Z" fill="#050509" stroke="#020204" strokeWidth="1.2"/>
+                      <ellipse cx="60" cy="32" rx="5" ry="7" fill="#050509"/>
+                    </svg>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+      </nav>
     </section>
 
     {!ready&&<div className="loading">THE GRAVEYARD IS WAKING…</div>}
