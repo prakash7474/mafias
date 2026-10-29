@@ -1,5 +1,5 @@
 import { Suspense, useMemo, useRef, useSyncExternalStore } from 'react';
-import { useFrame } from '@react-three/fiber';
+import { useFrame, useThree } from '@react-three/fiber';
 import { Smoke } from 'react-smoke';
 import * as THREE from 'three';
 import { introSmoke, isIntroSmokeMounted, subscribeIntroSmoke } from './introSmoke.js';
@@ -190,6 +190,15 @@ function getWispTextures(){
   return cachedTextures;
 }
 
+/* Warm the procedural textures up front. Generating them inside the mount
+   that the 0.45 s label triggers blocks the main thread for a quarter of a
+   second — right at the flash peak, where the frame must stay smooth. The
+   caches are module-level, so idle-time generation is all it takes. */
+export function warmIntroSmokeAssets(){
+  getWispTextures();
+  getWallTexture();
+}
+
 /* ---- material ------------------------------------------------------ *
  * Created lazily on the library's first material-generator call (it hands
  * us the loaded textures), then kept in `materials` so the frame loop can
@@ -257,15 +266,36 @@ function SmokeField(){
   const group = useRef(null);
   const backdrop = useRef(null);
   const seeded = useRef(false);
+  const placed = useRef(false);
+  const camera = useThree(s => s.camera);
+  const orbVec = useMemo(() => new THREE.Vector3(), []);
+  const rayVec = useMemo(() => new THREE.Vector3(), []);
   const textures = useMemo(getWispTextures, []);
   const wallTexture = useMemo(getWallTexture, []);
   const field = useMemo(createMaterialField, []);
   const geometryField = useMemo(createGeometryField, []);
 
-  /* One frame pass: seeding, expansion, slow swirl, master fade. */
+  /* One frame pass: anchoring, seeding, expansion, slow swirl, master fade. */
   useFrame(({ clock }) => {
     const g = group.current;
     if(!g) return;
+    /* Anchor the whole field on the camera → orb ray ONCE, on the first
+       frame. The entrance can start from two poses — the button push
+       (camera z≈8.5) or the scroll arrival (camera z≈-1.6) — and the orb
+       travels with scroll, so a fixed field would end up behind the lens
+       on the second path and the screen would never be covered. */
+    if(!placed.current){
+      placed.current = true;
+      const a = introSmoke.anchor || { x: 0, y: 2.2, z: -4.8 };
+      orbVec.set(a.x, a.y, a.z);
+      rayVec.copy(orbVec).sub(camera.position);
+      const dist = rayVec.length() || 1;
+      rayVec.divideScalar(dist);
+      // same 5-unit stand-off the design was tuned for when the camera is
+      // far away, pulled in (never closer than 3.4) when it arrives close
+      const standOff = Math.min(5.1, Math.max(3.4, dist * .55));
+      g.position.copy(camera.position).addScaledVector(rayVec, standOff);
+    }
     // wait for actual particles — the wall alone is not enough, and the
     // library's own passive effects may not have run yet
     if(!seeded.current){

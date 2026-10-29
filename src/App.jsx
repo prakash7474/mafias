@@ -5,6 +5,7 @@ import { Howl, Howler } from 'howler';
 import GraveyardScene from './scene/GraveyardScene.jsx';
 import { stormSettings } from './scene/lightning.js';
 import { introSmoke, mountIntroSmoke, unmountIntroSmoke } from './scene/introSmoke.js';
+import { warmIntroSmokeAssets } from './scene/IntroSmoke.jsx';
 
 /* The edited 4.2 s swoosh. Served from /public, never from a CDN, and always
    started from zero on the click. If the file is absent the entrance still
@@ -70,6 +71,9 @@ export default function App(){
   /* ---- audio assets (created once, never autoplayed) ---- */
   useEffect(()=>{
     document.body.classList.add('mafias-static');
+    // build the smoke textures while the page is idle so the 0.45 s mount
+    // of the field costs no main-thread time at all
+    warmIntroSmokeAssets();
     drone.current=new Howl({
       src:['/audio/Danny_Elfman_Wednesday_OST_-_Wednesday_Main_Titles_2022_(mp3.pm).mp3','/audio/dark-drone.mp3'],
       loop:true,volume:.24,html5:true,
@@ -137,6 +141,12 @@ export default function App(){
     if(started.current)return;
     started.current=true;
 
+    /* The sting plays in real time, so the timeline must be wall-clock too:
+       GSAP's default lag smoothing pauses the clock on any frame longer than
+       500 ms, which would drag every later phase permanently behind the
+       audio. Disabled for the sequence, restored the moment it settles. */
+    gsap.ticker.lagSmoothing(0);
+
     const reduced=prefersReduced();
 
     /* PHASE A — 00.00–00.15 */
@@ -165,6 +175,7 @@ export default function App(){
 
     const finish=()=>{
       timeline.current=null;
+      gsap.ticker.lagSmoothing(500,33);
       const max=Math.max(1,document.documentElement.scrollHeight-window.innerHeight);
       doneAt.current=Math.min(1,Math.max(0,window.scrollY/max));
       setIntroState(PHASE.COMPLETE);
@@ -217,7 +228,13 @@ export default function App(){
 
       /* PHASE E — fully covered (01.45–01.80) */
       .addLabel('smoke-covered',1.45)
-      .call(()=>setIntroState(PHASE.SMOKE_COVERED),null,1.45)
+      /* the orb has poured out its cloud — veil the geometry itself so the
+         cover is unambiguous (it is nearer the lens than the smoke wall on
+         the scroll-arrival path and would read through it) */
+      .call(()=>{
+        setIntroState(PHASE.SMOKE_COVERED);
+        window.dispatchEvent(new CustomEvent('mafias:portal-veil'));
+      },null,1.45)
 
       /* PHASE F — WELCOME TO MAFIAS (01.80–02.70) */
       .addLabel('welcome-reveal',1.8)
@@ -264,6 +281,7 @@ export default function App(){
 
   useEffect(()=>()=>{
     timeline.current?.kill();
+    gsap.ticker.lagSmoothing(500,33);
     clearTimeout(duckT.current);
     document.body.classList.remove('mafias-entering');
     document.documentElement.classList.remove('mafias-entering');

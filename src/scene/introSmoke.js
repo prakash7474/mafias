@@ -13,7 +13,13 @@
 export const introSmoke = {
   mounted: false, // particle field is in the scene graph
   ramp: 0,        // 0 → 1 expansion of the cloud out of the portal
-  alpha: 0        // master opacity of every smoke puff
+  alpha: 0,       // master opacity of every smoke puff
+  /* World position of the red orb, written by the scene when the entrance
+     starts. The field anchors itself on the camera → orb ray, so the cloud
+     erupts between the lens and the portal wherever the push stopped —
+     the click pose (z≈8.3) and the scroll arrival (z≈-1.6) are 10 units
+     apart, and a fixed field would sit behind the camera in one of them. */
+  anchor: { x: 0, y: 2.2, z: -4.8 }
 };
 
 const listeners = new Set();

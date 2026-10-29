@@ -18,6 +18,7 @@ import Storm from './Storm.jsx';
 import CloudSky from './CloudSky.jsx';
 import SkullStatue from '../components/SkullStatue.jsx';
 import IntroSmoke from './IntroSmoke.jsx';
+import { introSmoke } from './introSmoke.js';
 
 const isSmall=()=>typeof window!=='undefined'&&window.innerWidth<700;
 const prefersReduced=()=>typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -320,7 +321,7 @@ function Smoke(){
   return <group ref={group}>{items.map((d,i)=><sprite key={i} position={[d.x,d.y,d.z]} scale={[d.size*1.65,d.size,d.size]}><spriteMaterial map={texture} color="#cf203a" transparent opacity={d.opacity} depthWrite={false} blending={THREE.AdditiveBlending}/></sprite>)}</group>;
 }
 
-function Portal({refObj,lightA,lightB,materialRef}){return <group ref={refObj} position={[0,2.2,PORTAL_Z0]}>
+function Portal({refObj,lightA,lightB,materialRef}){return <group ref={refObj} name="mafias-portal" position={[0,2.2,PORTAL_Z0]}>
   <mesh><icosahedronGeometry args={[1.08,5]}/><MeshDistortMaterial ref={materialRef} color="#18060b" emissive="#520817" emissiveIntensity={1.45} metalness={.62} roughness={.5} distort={0} speed={0}/></mesh>
   <mesh scale={1.22}><icosahedronGeometry args={[1.08,2]}/><meshBasicMaterial color="#bd263d" wireframe transparent opacity={.14}/></mesh>
   <mesh rotation={[.4,.2,.1]}><torusGeometry args={[1.42,.012,8,100]}/><meshBasicMaterial color="#a81c32" transparent opacity={.6}/></mesh>
@@ -579,7 +580,11 @@ function GraveyardScene(){
       /* The push always ends the same distance short of the orb: from the
          idle pose that is the classic 12 → 8.3 move, from the end of the
          scroll approach it is only the last step forward. */
-      const pushZ=Math.max(PORTAL_Z0+3.2,camera.position.z-3.7);
+      const orbZ=portal.current?portal.current.position.z:PORTAL_Z0;
+      const pushZ=Math.max(orbZ+3.2,camera.position.z-3.7);
+      /* Hand the smoke field the orb's world position: it anchors itself
+         on the camera → orb ray when it mounts at 0.45 s. */
+      introSmoke.anchor={x:0,y:2.2,z:orbZ};
       gsap.killTweensOf(camera.position);
       gsap.to(camera.position,{x:0,y:2.2,z:pushZ,duration,ease:'power2.inOut'});
       if(portal.current){
@@ -602,22 +607,29 @@ function GraveyardScene(){
         .to(portalLightB.current,{intensity:38,duration:.08,ease:'power2.in'})
         .to(portalLightB.current,{intensity:13,duration:.4,ease:'power2.out'});
     };
+    // the smoke has covered the frame: hide the orb geometry itself so the
+    // cover is total (on the scroll-arrival path the orb sits nearer the
+    // lens than the smoke wall and would otherwise read through it)
+    const veil=()=>{if(portal.current)portal.current.visible=false;};
     // hand camera control back to the scrollbar without a jump
     const entered=()=>{
       diving.current=false;
       postEnter.current=true;
       enterZ.current=camera.position.z;
       gsap.killTweensOf(camera.position);
+      if(portal.current)portal.current.visible=true;   // the graveyard is back
     };
     const onScroll=(event)=>{scrollTarget.current=event.detail?.progress ?? 0;};
     window.addEventListener('mafias:enter',enter);
     window.addEventListener('mafias:portal-pulse',portalPulse);
+    window.addEventListener('mafias:portal-veil',veil);
     window.addEventListener('mafias:entered',entered);
     window.addEventListener('mafias:scroll',onScroll);
     return()=>{
       window.removeEventListener('mafias:stop-audio',freezeAudio);
       window.removeEventListener('mafias:enter',enter);
       window.removeEventListener('mafias:portal-pulse',portalPulse);
+      window.removeEventListener('mafias:portal-veil',veil);
       window.removeEventListener('mafias:entered',entered);
       window.removeEventListener('mafias:scroll',onScroll);
       gsap.killTweensOf(camera.position);
@@ -635,8 +647,8 @@ function GraveyardScene(){
     const p=scrollCurrent.current;
 
     /* During the push GSAP owns the camera position — we only keep it
-       aimed at the portal. */
-    if(diving.current){camera.lookAt(0,2.1,PORTAL_Z0);return;}
+       aimed at wherever the orb actually is (it travels with scroll). */
+    if(diving.current){camera.lookAt(0,2.1,portal.current?portal.current.position.z:PORTAL_Z0);return;}
 
     const px=reduced.current?0:pointer.x,py=reduced.current?0:pointer.y;
 
@@ -652,10 +664,12 @@ function GraveyardScene(){
       camera.position.x=THREE.MathUtils.damp(camera.position.x,swayX+px*.35,1.7,delta);
       camera.position.y=THREE.MathUtils.damp(camera.position.y,2.7+swayY+py*.14,2,delta);
       camera.position.z=THREE.MathUtils.damp(camera.position.z,CAM_START+(APPROACH_Z-CAM_START)*a,3.2,delta);
-      camera.lookAt(0,LOOK_Y0+a*.55,PORTAL_Z0);
+      camera.lookAt(0,LOOK_Y0+a*.55,PORTAL_Z0+p*PORTAL_Z_TRAVEL);
       if(portal.current){
         portal.current.rotation.y+=delta*.11;
-        portal.current.position.z=PORTAL_Z0;
+        // the orb keeps its authored scroll travel — freezing it here and
+        // releasing it after the intro would make it jump backwards at settle
+        portal.current.position.z=PORTAL_Z0+p*PORTAL_Z_TRAVEL;
       }
       /* the orb reads hotter as the visitor closes in; Phase C still owns
          emissiveIntensity, so only the fill light is driven here */
