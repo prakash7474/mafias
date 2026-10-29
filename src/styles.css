@@ -198,3 +198,8 @@ body.mafias-entering .enter{transition:border-color .25s}.enter:focus-visible{ou
   20%{opacity:1}
   100%{opacity:0;transform:translate(calc(-50% + (var(--i)-2.5)*60px), calc(-50% - 80px)) scale(1.2)}
 }
+
+
+/* Make register button smoke fill more */
+.logo-intro__smoke--button .reg-smoke-wisp{background:radial-gradient(circle,rgba(220,30,60,0.5) 0%,rgba(150,10,30,0.3) 40%,rgba(60,5,15,0) 75%) !important;filter:blur(22px) !important;opacity:0.6 !important}
+.logo-intro__smoke--button{mix-blend-mode:screen}

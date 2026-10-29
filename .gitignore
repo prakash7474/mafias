@@ -2,7 +2,8 @@ node_modules
 dist/
 audit-tmp/
 *.log
-*.json
-*.jpg
-*.mjs
 *.map
+.DS_Store
+.env
+.env.local
+.env.*.local

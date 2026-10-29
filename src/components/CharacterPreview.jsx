@@ -80,12 +80,37 @@ export default function CharacterPreview() {
   );
 
   useEffect(() => {
+    const onChange = (e) => {
+      const detail = e.detail || {};
+      if (detail.gender) {
+        commitGender(detail.gender);
+      }
+      if (detail.tag) {
+        commitTag(detail.tag);
+      }
+    };
+    window.addEventListener('mafias:char-change', onChange);
     return () => {
+      window.removeEventListener('mafias:char-change', onChange);
       if (timerRef.current) window.clearTimeout(timerRef.current);
     };
-  }, []);
+  }, [commitGender, commitTag]);
 
   const srcResolved = useMemo(() => src || '', [src]);
+
+  useEffect(() => {
+    const onChange = (e) => {
+      const detail = e && e.detail ? e.detail : {};
+      if (detail.gender) {
+        commitGender(detail.gender);
+      }
+      if (detail.tag) {
+        commitTag(detail.tag);
+      }
+    };
+    window.addEventListener('mafias:char-change', onChange);
+    return () => window.removeEventListener('mafias:char-change', onChange);
+  }, [commitGender, commitTag]);
 
   const caption =
     gender && tagId

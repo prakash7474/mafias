@@ -271,6 +271,9 @@ export default function RegistrationForm() {
       setGender(id);
       setNameTouched(false);
       setContactTouched(false);
+      try {
+        window.dispatchEvent(new CustomEvent('mafias:char-change', { detail: { gender: id } }));
+      } catch (e) {}
     },
     [setGender, setNameTouched, setContactTouched]
   );
@@ -280,6 +283,9 @@ export default function RegistrationForm() {
       setTag(id);
       setNameTouched(false);
       setContactTouched(false);
+      try {
+        window.dispatchEvent(new CustomEvent('mafias:char-change', { detail: { tag: id } }));
+      } catch (e) {}
     },
     [setTag, setNameTouched, setContactTouched]
   );
@@ -383,7 +389,7 @@ export default function RegistrationForm() {
             </option>
           ))}
         </select>
-        {!department && submitted && (
+        {!department && (nameTouched || contactTouched) && (
           <p className="reg-field__error" role="alert">Choose department</p>
         )}
       </div>
