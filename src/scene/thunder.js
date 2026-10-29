@@ -25,6 +25,8 @@ export class ThunderPlayer {
     this.clock = 0;            // seconds, fed by the shared frame loop
     this.maxVoices = 2;
     this.gap = .9;             // never fire thunder on top of fresh thunder
+    this.decoding = false;     // one fetch/decode at a time
+    this.thunderBuffer = null; // decoded /audio/thunder.mp3, once per page
   }
 
   /* Lazily build the audio graph. Call only from a user gesture path. */
@@ -70,9 +72,35 @@ export class ThunderPlayer {
     }
   }
 
-  /* Called when a lightning event starts. The delay approximates the
-     light-to-sound travel time for the strike distance, capped so the
-     visitor is never left waiting. */
+  /* Load the real recording once, asynchronously, on the first SOUND ON.
+     Nothing waits for it: until it is decoded the synth fallback is used, so
+     a missing/corrupt file can never silence the storm or throw. */
+  _decode(){
+    if(this.thunderBuffer || this.decoding || !this.ctx) return;
+    this.decoding = true;
+    const ctx = this.ctx;
+    fetch('/audio/thunder.mp3')
+      .then(r => {
+        if(!r.ok) throw new Error(`HTTP ${r.status}`);
+        return r.arrayBuffer();
+      })
+      .then(data => new Promise((resolve, reject) => {
+        // callback form keeps Safari on the same code path as the promise form
+        ctx.decodeAudioData(data, resolve, reject);
+      }))
+      .then(buffer => {
+        if(this.ctx === ctx) this.thunderBuffer = buffer;
+      })
+      .catch(err => {
+        if(import.meta.env.DEV)
+          console.info('[MAFIAS] thunder.mp3 unavailable; using the synthesised rumble instead:', err?.message || err);
+      })
+      .finally(() => { this.decoding = false; });
+  }
+
+  /* Called when a lightning event starts. Thunder follows its flash almost
+     immediately (a breathing beat, not a multi-second delay) so the sound is
+     heard while the strike is still on screen. */
   queue(delaySeconds, { km = 1, strength = 1 } = {}){
     if(!this.enabled || !this.ctx) return;
     const d = clamp(delaySeconds, .05, THUNDER_DELAY_CAP + .5);
@@ -227,5 +255,6 @@ export class ThunderPlayer {
     this.noise = null;
     this.thunderRaw = null;
     this.thunderBuffer = null;
+    this.decoding = false;
   }
 }

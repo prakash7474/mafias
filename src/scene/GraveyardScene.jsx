@@ -33,9 +33,10 @@ const Q=MOBILE
 // Scroll-driven camera path: z = CAM_START + CAM_TRAVEL * progress (travel is negative).
 const CAM_START=12, CAM_TRAVEL=-18, LOOK_Y0=1.4, LOOK_Y1=.7, LOOK_Z0=-4, LOOK_Z1=-6;
 /* Pre-click approach: the scroll carries the camera from the idle pose
-   (z 12) down to APPROACH_Z over the first APPROACH_P of the page — close
-   enough to the orb that arriving there means "reached the red ball". */
-const APPROACH_P=.5, APPROACH_Z=-1.5;
+   (z 12) all the way down to APPROACH_Z across the whole page, so the story
+   panels are read on the way. The dive into the orb happens only once the
+   last panel (03 / THE CIRCLE) is in place at the bottom of the scroll. */
+const APPROACH_P=1, APPROACH_Z=-1.5, APPROACH_DONE=.985;
 const SWAY_X=1.15, SWAY_Y=.22, SWAY_SPEED=.3;
 const PORTAL_Z0=-4.8, PORTAL_Z_TRAVEL=-4;
 // after the "cross over" dive the scrollbar keeps working, but from the landing spot
@@ -652,6 +653,12 @@ function GraveyardScene(){
 
     const px=reduced.current?0:pointer.x,py=reduced.current?0:pointer.y;
 
+    /* Camera ownership is a single hand-off, not two controllers:
+         before the push   → this loop (idle sway / scroll approach)
+         during the push   → GSAP (`diving`), awaited by the branch above
+         after the settle  → this loop again, from the landing pose
+       `started` only selects the post-entrance branch; it must NOT return
+       early, or the scrollbar would stop moving the camera for good. */
     if(!started.current){
       /* --- idle + approach ----------------------------------------- *
          A continuous slow sway (left, then right, forever) that eases out
@@ -674,7 +681,9 @@ function GraveyardScene(){
       /* the orb reads hotter as the visitor closes in; Phase C still owns
          emissiveIntensity, so only the fill light is driven here */
       if(portalLightA.current)portalLightA.current.intensity=30+a*34;
-      if(!reached.current&&a>=1){
+      /* Story 02 and 03 have been read by the time the scroll bottom is
+         reached: only then does the camera dive into the red orb. */
+      if(!reached.current&&p>=APPROACH_DONE){
         reached.current=true;
         window.dispatchEvent(new CustomEvent('mafias:enter-auto'));
       }

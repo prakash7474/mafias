@@ -275,10 +275,14 @@ function SmokeField(){
   const field = useMemo(createMaterialField, []);
   const geometryField = useMemo(createGeometryField, []);
 
-  /* One frame pass: anchoring, seeding, expansion, slow swirl, master fade. */
+  /* One frame pass: anchoring, seeding, expansion, slow swirl, master fade.
+     This is the only writer of this group's transform/opacity: the timeline
+     publishes plain numbers through ./introSmoke.js and never touches the
+     three.js objects, so expansion has exactly one owner. */
   useFrame(({ clock }) => {
     const g = group.current;
     if(!g) return;
+
     /* Anchor the whole field on the camera → orb ray ONCE, on the first
        frame. The entrance can start from two poses — the button push
        (camera z≈8.5) or the scroll arrival (camera z≈-1.6) — and the orb

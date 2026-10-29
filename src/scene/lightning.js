@@ -42,8 +42,11 @@ export const THUNDER_DELAY_CAP = 3.2;  // seconds — usability cap
 export function distanceKm(pos, from){
   return pos.distanceTo(from) * KM_PER_UNIT;
 }
+/* The rumble starts with the strike, at most a beat later: a visible bolt and
+   its sound belong to the same moment. (The distance still shapes the sound's
+   rate, weight and brightness in thunder.js.) */
 export function thunderDelayFor(km){
-  return Math.min(THUNDER_DELAY_CAP, km * 3);
+  return Math.min(THUNDER_DELAY_CAP, .12 + km * .12);
 }
 
 /* ------------------------------------------------------------------ *
