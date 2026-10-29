@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Sparkles, MeshDistortMaterial } from '@react-three/drei';
 import * as THREE from 'three';
@@ -11,6 +11,13 @@ import {
 } from './procgen.js';
 
 import { stormState } from './lightning.js';
+import { WIND, applyWindBend, clearBendShaders, updateWind } from './wind.js';
+import GrassField from './GrassField.jsx';
+import Ghosts from './Ghosts.jsx';
+import Storm from './Storm.jsx';
+import CloudSky from './CloudSky.jsx';
+import SkullStatue from '../components/SkullStatue.jsx';
+import IntroSmoke from './IntroSmoke.jsx';
 
 const isSmall=()=>typeof window!=='undefined'&&window.innerWidth<700;
 const prefersReduced=()=>typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -24,6 +31,11 @@ const Q=MOBILE
 
 // Scroll-driven camera path: z = CAM_START + CAM_TRAVEL * progress (travel is negative).
 const CAM_START=12, CAM_TRAVEL=-18, LOOK_Y0=1.4, LOOK_Y1=.7, LOOK_Z0=-4, LOOK_Z1=-6;
+/* Pre-click approach: the scroll carries the camera from the idle pose
+   (z 12) down to APPROACH_Z over the first APPROACH_P of the page — close
+   enough to the orb that arriving there means "reached the red ball". */
+const APPROACH_P=.5, APPROACH_Z=-1.5;
+const SWAY_X=1.15, SWAY_Y=.22, SWAY_SPEED=.3;
 const PORTAL_Z0=-4.8, PORTAL_Z_TRAVEL=-4;
 // after the "cross over" dive the scrollbar keeps working, but from the landing spot
 const POST_ENTER_TRAVEL=-3;
@@ -223,6 +235,7 @@ function Sky(){
   const texture=useMemo(makeSkyTexture,[]);
   useEffect(()=>()=>{texture?.dispose();},[texture]);
   useFrame((_,delta)=>{
+    if(typeof window!=='undefined'&&window.__MAFIAS_STATIC__!==false)return;
     if(ref.current)ref.current.rotation.y+=delta*.004;
     // lightning response: the cloud band brightens toward cool white and
     // settles back to its exact authored colour between strikes
@@ -251,6 +264,7 @@ function Bat({start,scale=1,speed=1,phase=0}){
   const body=useMemo(()=>new THREE.CircleGeometry(.1,12),[]);
   useEffect(()=>()=>{wing.dispose();body.dispose();},[wing,body]);
   useFrame(({clock})=>{
+    if(typeof window!=='undefined'&&window.__MAFIAS_STATIC__!==false)return;
     if(!ref.current)return;
     const t=clock.elapsedTime*speed+phase;
     const flap=Math.sin(t*11);
@@ -287,6 +301,7 @@ function Smoke(){
   },[]);
   useEffect(()=>()=>{texture?.dispose();},[texture]);
   useFrame(({clock,camera},delta)=>{
+    if(typeof window!=='undefined'&&window.__MAFIAS_STATIC__!==false)return;
     if(!group.current)return;const t=clock.elapsedTime;
     group.current.children.forEach((sprite,i)=>{
       const d=items[i];if(!d)return;
@@ -305,19 +320,20 @@ function Smoke(){
   return <group ref={group}>{items.map((d,i)=><sprite key={i} position={[d.x,d.y,d.z]} scale={[d.size*1.65,d.size,d.size]}><spriteMaterial map={texture} color="#cf203a" transparent opacity={d.opacity} depthWrite={false} blending={THREE.AdditiveBlending}/></sprite>)}</group>;
 }
 
-function Portal({refObj}){return <group ref={refObj} position={[0,2.2,PORTAL_Z0]}>
-  <mesh><icosahedronGeometry args={[1.08,5]}/><MeshDistortMaterial color="#18060b" emissive="#520817" emissiveIntensity={1.45} metalness={.62} roughness={.5} distort={.38} speed={1.8}/></mesh>
+function Portal({refObj,lightA,lightB,materialRef}){return <group ref={refObj} position={[0,2.2,PORTAL_Z0]}>
+  <mesh><icosahedronGeometry args={[1.08,5]}/><MeshDistortMaterial ref={materialRef} color="#18060b" emissive="#520817" emissiveIntensity={1.45} metalness={.62} roughness={.5} distort={0} speed={0}/></mesh>
   <mesh scale={1.22}><icosahedronGeometry args={[1.08,2]}/><meshBasicMaterial color="#bd263d" wireframe transparent opacity={.14}/></mesh>
   <mesh rotation={[.4,.2,.1]}><torusGeometry args={[1.42,.012,8,100]}/><meshBasicMaterial color="#a81c32" transparent opacity={.6}/></mesh>
   {/* E. portal illumination: emissive surfaces + supplementary fill light */}
-  <pointLight color="#ff2742" intensity={30} distance={18} decay={2}/>
-  <pointLight position={[0,-1.75,.7]} color="#c11631" intensity={13} distance={12} decay={2}/>
+  <pointLight ref={lightA} color="#ff2742" intensity={30} distance={18} decay={2}/>
+  <pointLight ref={lightB} position={[0,-1.75,.7]} color="#c11631" intensity={13} distance={12} decay={2}/>
 </group>}
 
-export default function GraveyardScene(){
+function GraveyardScene(){
   const {camera,scene,gl}=useThree();
   const portal=useRef();
-  const scrollTarget=useRef(0),scrollCurrent=useRef(0),postEnter=useRef(false),enterZ=useRef(0),diving=useRef(false),reduced=useRef(false);
+  const scrollTarget=useRef(0),scrollCurrent=useRef(0),postEnter=useRef(false),enterZ=useRef(0),diving=useRef(false),reduced=useRef(false),started=useRef(false),reached=useRef(false);
+  const portalLightA=useRef(null),portalLightB=useRef(null),portalMaterial=useRef(null);
   const stormApi=useRef(null);
 
   /* ---- shared assets: built once per quality preset, disposed on unmount ---- */
@@ -543,15 +559,48 @@ export default function GraveyardScene(){
   useEffect(()=>{
     reduced.current=prefersReduced();
     scene.fog=new THREE.FogExp2(FOG_COLOR,FOG_DENSITY);
+    /* The graveyard now lives from the first frame: bats, wind, ghosts and
+       the drifting smoke are the ambient layer the visitor asked for — only
+       the intro sequence is event-driven on top of them. */
+    window.__MAFIAS_STATIC__=false;
+    const freezeAudio=()=>{window.__MAFIAS_AUDIO_STOPPED__=true;};
+    window.addEventListener('mafias:stop-audio',freezeAudio);
     if(import.meta.env.DEV){
       // dev-only inspection hook used by the browser audit
       window.__MAFIAS__={camera,scene,renderer:gl,get progress(){return scrollCurrent.current;},get target(){return scrollTarget.current;},get storm(){return stormApi.current;}};
     }
-    const enter=()=>{
+    /* Phase B — leave the idle pose and push a short way toward the orb.
+       The entrance timeline decides *when*; the easing stays here. */
+    const enter=(event)=>{
+      started.current=true;
+      window.__MAFIAS_STATIC__=false;
       diving.current=true;
+      const duration=event?.detail?.duration??.36;
+      /* The push always ends the same distance short of the orb: from the
+         idle pose that is the classic 12 → 8.3 move, from the end of the
+         scroll approach it is only the last step forward. */
+      const pushZ=Math.max(PORTAL_Z0+3.2,camera.position.z-3.7);
       gsap.killTweensOf(camera.position);
-      gsap.to(camera.position,{x:0,y:2.15,z:-7.4,duration:2,ease:'power3.in'});
-      if(portal.current)gsap.to(portal.current.scale,{x:2,y:2,z:2,duration:1.6,ease:'power2.in'});
+      gsap.to(camera.position,{x:0,y:2.2,z:pushZ,duration,ease:'power2.inOut'});
+      if(portal.current){
+        gsap.killTweensOf(portal.current.scale);
+        gsap.to(portal.current.scale,{x:1.2,y:1.2,z:1.2,duration,ease:'power2.out'});
+      }
+    };
+    /* Phase C — the orb flares and settles back to its authored brightness,
+       so the red flash reads as the portal opening, not a UI overlay. */
+    const portalPulse=()=>{
+      if(!diving.current)return;
+      const mat=portalMaterial.current;
+      if(mat)gsap.timeline()
+        .to(mat,{emissiveIntensity:4.4,duration:.08,ease:'power2.in'})
+        .to(mat,{emissiveIntensity:1.45,duration:.34,ease:'power2.out'});
+      if(portalLightA.current)gsap.timeline()
+        .to(portalLightA.current,{intensity:86,duration:.08,ease:'power2.in'})
+        .to(portalLightA.current,{intensity:30,duration:.4,ease:'power2.out'});
+      if(portalLightB.current)gsap.timeline()
+        .to(portalLightB.current,{intensity:38,duration:.08,ease:'power2.in'})
+        .to(portalLightB.current,{intensity:13,duration:.4,ease:'power2.out'});
     };
     // hand camera control back to the scrollbar without a jump
     const entered=()=>{
@@ -562,15 +611,19 @@ export default function GraveyardScene(){
     };
     const onScroll=(event)=>{scrollTarget.current=event.detail?.progress ?? 0;};
     window.addEventListener('mafias:enter',enter);
+    window.addEventListener('mafias:portal-pulse',portalPulse);
     window.addEventListener('mafias:entered',entered);
     window.addEventListener('mafias:scroll',onScroll);
     return()=>{
+      window.removeEventListener('mafias:stop-audio',freezeAudio);
       window.removeEventListener('mafias:enter',enter);
+      window.removeEventListener('mafias:portal-pulse',portalPulse);
       window.removeEventListener('mafias:entered',entered);
       window.removeEventListener('mafias:scroll',onScroll);
       gsap.killTweensOf(camera.position);
       if(portal.current)gsap.killTweensOf(portal.current.scale);
       scene.fog=null;
+      window.__MAFIAS_STATIC__=undefined;
       if(import.meta.env.DEV&&window.__MAFIAS__)delete window.__MAFIAS__;
     };
   },[camera,scene,gl]);
@@ -580,14 +633,46 @@ export default function GraveyardScene(){
     updateWind(t); // shared time source: bark + grass bend shaders
     scrollCurrent.current=THREE.MathUtils.damp(scrollCurrent.current,scrollTarget.current,3.2,delta);
     const p=scrollCurrent.current;
-    if(!diving.current){
-      const px=reduced.current?0:pointer.x,py=reduced.current?0:pointer.y;
-      camera.position.x+=(px*.25-camera.position.x*.012)*delta;
-      camera.position.y=THREE.MathUtils.damp(camera.position.y,2.7+py*.14+p*1.15,2.2,delta);
-      camera.position.z=THREE.MathUtils.damp(camera.position.z,postEnter.current?enterZ.current+POST_ENTER_TRAVEL*p:CAM_START+CAM_TRAVEL*p,3.2,delta);
-      camera.lookAt(0,LOOK_Y0+p*LOOK_Y1,LOOK_Z0+p*LOOK_Z1);
-      if(portal.current){portal.current.rotation.y+=delta*.11;portal.current.position.z=PORTAL_Z0+p*PORTAL_Z_TRAVEL;}
-    } else camera.lookAt(0,2.1,PORTAL_Z0);
+
+    /* During the push GSAP owns the camera position — we only keep it
+       aimed at the portal. */
+    if(diving.current){camera.lookAt(0,2.1,PORTAL_Z0);return;}
+
+    const px=reduced.current?0:pointer.x,py=reduced.current?0:pointer.y;
+
+    if(!started.current){
+      /* --- idle + approach ----------------------------------------- *
+         A continuous slow sway (left, then right, forever) that eases out
+         as the scroll carries the camera toward the orb. The orb itself
+         holds still — the camera does all of the travelling. */
+      const a=Math.min(1,p/APPROACH_P);
+      const calm=1-a*.65;
+      const swayX=reduced.current?0:Math.sin(t*SWAY_SPEED)*SWAY_X*calm;
+      const swayY=reduced.current?0:Math.sin(t*SWAY_SPEED*.72+1.3)*SWAY_Y*calm;
+      camera.position.x=THREE.MathUtils.damp(camera.position.x,swayX+px*.35,1.7,delta);
+      camera.position.y=THREE.MathUtils.damp(camera.position.y,2.7+swayY+py*.14,2,delta);
+      camera.position.z=THREE.MathUtils.damp(camera.position.z,CAM_START+(APPROACH_Z-CAM_START)*a,3.2,delta);
+      camera.lookAt(0,LOOK_Y0+a*.55,PORTAL_Z0);
+      if(portal.current){
+        portal.current.rotation.y+=delta*.11;
+        portal.current.position.z=PORTAL_Z0;
+      }
+      /* the orb reads hotter as the visitor closes in; Phase C still owns
+         emissiveIntensity, so only the fill light is driven here */
+      if(portalLightA.current)portalLightA.current.intensity=30+a*34;
+      if(!reached.current&&a>=1){
+        reached.current=true;
+        window.dispatchEvent(new CustomEvent('mafias:enter-auto'));
+      }
+      return;
+    }
+
+    /* --- after the sequence: the scrollbar owns the camera again --- */
+    camera.position.x+=(px*.25-camera.position.x*.012)*delta;
+    camera.position.y=THREE.MathUtils.damp(camera.position.y,2.7+py*.14+p*1.15,2.2,delta);
+    camera.position.z=THREE.MathUtils.damp(camera.position.z,postEnter.current?enterZ.current+POST_ENTER_TRAVEL*p:CAM_START+CAM_TRAVEL*p,3.2,delta);
+    camera.lookAt(0,LOOK_Y0+p*LOOK_Y1,LOOK_Z0+p*LOOK_Z1);
+    if(portal.current){portal.current.rotation.y+=delta*.11;portal.current.position.z=PORTAL_Z0+p*PORTAL_Z_TRAVEL;}
   });
 
   return <>
@@ -616,7 +701,7 @@ export default function GraveyardScene(){
     <Ghosts treeGeos={A.treeGeos} treeDefs={treeDefs}/>
     <Moon soft={A.softTex} moonTex={A.moonTex}/>
     <Haze soft={A.softTex}/>
-    <Portal refObj={portal}/>
+    <Portal refObj={portal} lightA={portalLightA} lightB={portalLightB} materialRef={portalMaterial}/>
     <SkullStatue />
     <Storm apiRef={stormApi} soft={A.softTex}/>
     {/* volumetric storm clouds: one EffectComposer, driven by stormState */}
@@ -624,5 +709,12 @@ export default function GraveyardScene(){
     <Smoke/>
     {bats.map((b,i)=><Bat key={i} {...b}/>)}
     <Sparkles count={Q.sparks} scale={[15,7,16]} size={1.4} speed={.13} opacity={.24} color="#c32a42" position={[0,1.5,-5]}/>
+    {/* entrance only — mounts on the smoke-burst label, unmounts when the
+        sequence settles (see ../scene/introSmoke.js) */}
+    <IntroSmoke/>
   </>;
 }
+
+/* The scene takes no props, so memo keeps scroll-driven App renders from
+   re-rendering (and re-reconciling) the whole graveyard tree. */
+export default memo(GraveyardScene);

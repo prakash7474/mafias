@@ -5,6 +5,27 @@
 .shade{position:fixed;inset:0;z-index:1;pointer-events:none;background:linear-gradient(0deg,rgba(2,2,4,.5),transparent 35%,rgba(2,2,4,.28)),radial-gradient(ellipse at center,transparent 26%,rgba(3,3,5,.16) 58%,rgba(2,2,4,.55) 100%)}
 .grain{position:fixed;inset:-50%;z-index:7;pointer-events:none;opacity:.055;background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 180 180' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.5'/%3E%3C/svg%3E");animation:grain .35s steps(2) infinite}
 @keyframes grain{0%{transform:translate(0,0)}50%{transform:translate(-1%,1%)}100%{transform:translate(1%,-1%)}}
+body.mafias-static .grain{animation:none}
+body.mafias-static .sound.on .bars i,body.mafias-entering .sound .bars i{animation:none}
+body.mafias-entering{overflow:hidden}
+button:disabled{cursor:default;opacity:.58}
+/* Scroll is frozen for the whole sequence (html, because body overflow alone
+   leaves the document scrollbar live). */
+html.mafias-entering{overflow:hidden}
+.intro-flash{position:fixed;inset:0;z-index:10;pointer-events:none;opacity:0;background:radial-gradient(ellipse at 50% 46%,rgba(255,55,78,.9),rgba(175,9,35,.6) 34%,rgba(18,2,8,.94) 100%);mix-blend-mode:screen}
+.welcome-intro{position:fixed;inset:0;z-index:11;display:flex;align-items:center;justify-content:center;padding:24px;pointer-events:none;opacity:0;visibility:hidden}
+.welcome-intro[data-show="true"]{visibility:visible}
+.welcome-intro h2{max-width:94vw;margin:0;text-align:center;font-size:clamp(30px,7vw,76px);color:#fff8f4;text-shadow:0 0 22px rgba(232,51,78,.65),0 2px 35px #140108;line-height:1.2}
+/* Letters are driven entirely by the entrance timeline (no CSS keyframes),
+   so the stagger stays locked to the same clock as the smoke and the sting. */
+.welcome-letter{display:inline-block;--letter-blur:12px;filter:blur(var(--letter-blur));opacity:0;transform-origin:center;will-change:transform,filter,opacity}
+.logo-intro{position:fixed;inset:0;z-index:12;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;padding:24px;background:radial-gradient(ellipse at center,rgba(5,4,8,.6),rgba(3,3,6,.94));pointer-events:none;opacity:0;visibility:hidden}
+.logo-intro[data-show="true"]{visibility:visible}
+.logo-intro__glow{position:absolute;inset:0;margin:auto;width:min(96vw,660px);height:min(96vw,660px);border-radius:50%;pointer-events:none;opacity:0;background:radial-gradient(circle,rgba(190,26,50,.34) 0%,rgba(150,14,36,.16) 38%,rgba(90,6,20,0) 68%)}
+.logo-intro img{position:relative;display:block;width:min(72vw,460px);height:auto;max-height:72vh;object-fit:contain;--logo-blur:10px;filter:blur(var(--logo-blur)) drop-shadow(0 0 24px rgba(198,26,52,.34)) drop-shadow(0 8px 26px rgba(0,0,0,.7))}
+.logo-intro p{margin:0;color:#d8c9cf;font-size:10px;letter-spacing:.24em;text-shadow:0 0 14px #a81730}
+@media(max-width:700px){.logo-intro img{width:min(84vw,420px);max-height:68vh}.logo-intro p{font-size:9px;letter-spacing:.18em}.welcome-intro h2{font-size:clamp(19px,5.2vw,30px);letter-spacing:.05em}}
+@media(prefers-reduced-motion:reduce){.welcome-letter{--letter-blur:0px}.intro-flash{mix-blend-mode:normal}}
 .topbar{position:fixed;z-index:8;top:0;left:0;width:100%;display:flex;align-items:center;justify-content:space-between;padding:28px 5vw}.brand{font-family:Cinzel,serif;font-size:23px;font-weight:700;letter-spacing:.14em;color:#f6eff0;text-decoration:none}.brand:focus-visible{outline:2px solid #d05b6b;outline-offset:5px}.descriptor{font-size:9px;letter-spacing:.25em;color:#b9b7c0}.descriptor i{display:inline-block;width:5px;height:5px;background:#bb1e35;border-radius:50%;margin:0 8px 1px 0;box-shadow:0 0 12px #c21e3a}
 .sound,.storm{display:flex;align-items:center;gap:10px;color:#f0e9eb;background:rgba(6,6,10,.5);border:1px solid #5a454d;padding:11px 14px;font-size:9px;letter-spacing:.16em;cursor:pointer}.sound:hover,.sound:focus-visible,.storm:hover,.storm:focus-visible{border-color:#c32a42;outline:2px solid #d05b6b;outline-offset:3px}.bars{display:flex;align-items:center;gap:2px;height:12px}.bars i{width:2px;height:4px;background:#d42a45}.sound.on .bars i{animation:eq .6s infinite alternate}.bars i:nth-child(2){animation-delay:.12s}.bars i:nth-child(3){animation-delay:.26s}.bars i:nth-child(4){animation-delay:.18s}@keyframes eq{to{height:12px}}
 .hero{position:fixed;z-index:4;top:48%;left:50%;transform:translate(-50%,-50%);width:min(720px,92vw);display:flex;flex-direction:column;align-items:center;text-align:center;transition:opacity .25s linear}.eyebrow{display:flex;align-items:center;gap:12px;color:#d2cbd0;font-size:9px;letter-spacing:.28em}.eyebrow span{width:22px;height:1px;background:#b5233a}
@@ -23,7 +44,8 @@ h1,h2{font-family:Cinzel,serif;font-weight:500;line-height:1.06;letter-spacing:.
 .story-two{top:0}.story-three{top:100vh}.story-index{font-size:9px;letter-spacing:.26em;color:#c4b5bc}
 .story-panel h2{font-family:Cinzel,serif;font-size:clamp(42px,7vw,86px);line-height:1.06;font-weight:500;margin:24px 0;text-shadow:0 5px 28px #000}
 .story-panel h2 em{font-style:normal;color:#d02a43}.story-panel p{font-size:13px;color:#d0c5cb;letter-spacing:.04em}
-@media(max-width:700px){.experience{min-height:1500px}.story-panel h2{font-size:clamp(38px,11vw,64px)}.topbar{padding:20px 4vw}.sound,.storm{padding:9px 10px;font-size:8px;letter-spacing:.1em;gap:6px}}
+@media(max-width:700px){.experience{min-height:1500px}.story-panel h2{font-size:clamp(38px,11vw,64px)}.topbar{padding:20px 4vw}  .sound,.storm{padding:9px 10px;font-size:8px;letter-spacing:.1em;gap:6px}}
+
 @media(prefers-reduced-motion:reduce){html{scroll-behavior:auto}}
 
 /* WebGL-unavailable fallback: a static night graveyard sky keeps the page usable. */

@@ -66,7 +66,7 @@ function CloudEffects({ atmoRef, cloudsRef }) {
   useFrame(() => {
     const atmo = atmoRef.current;
     const clouds = cloudsRef.current;
-    if (!atmo || !clouds) return;
+    if (!atmo || !clouds || stormState.paused) return;
 
     const e = stormState.env; // 0..1 envelope written by Storm this frame
 
@@ -94,7 +94,7 @@ function CloudEffects({ atmoRef, cloudsRef }) {
         ref={cloudsRef}
         qualityPreset={MOBILE ? 'low' : 'high'}
         resolutionScale={MOBILE ? 0.6 : 1}
-        temporalUpscale
+        temporalUpscale={false}
         lightShafts={false}
         skipRendering={false}
         coverage={0.63}

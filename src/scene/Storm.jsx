@@ -195,6 +195,18 @@ export default function Storm({ apiRef, soft }){
     const c = cfg.current;
 
     /* flashes and sound are driven straight from the topbar state */
+    if(stormSettings.paused){
+      if(event.current) event.current=null;
+      if(glowRef.current?.material)glowRef.current.material.opacity=0;
+      for(const group of groups.current)if(group)group.visible=false;
+      stormState.env=0; stormState.active=false;
+      if(dirRef.current)dirRef.current.intensity=0;
+      if(ambRef.current)ambRef.current.intensity=0;
+      if(localRef.current)localRef.current.intensity=0;
+      if(glowRef.current)glowRef.current.visible=false;
+      thunder.current.setEnabled(false);
+      return;
+    }
     const wantSound = stormSettings.sound && c.thunder;
     if(wantSound !== soundOn.current){ soundOn.current = wantSound; thunder.current.setEnabled(wantSound); }
     c.enabled = stormSettings.flashes;

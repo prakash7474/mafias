@@ -11,7 +11,7 @@ import { makeRng } from './procgen.js';
 
 /* Controls written by App (topbar toggles) and read by Storm every frame.
    Plain module state, so no event plumbing and no lost state on remount. */
-export const stormSettings = { sound: false, flashes: true };
+export const stormSettings = { sound: false, flashes: true, paused: false };
 
 /* Single writer (Storm), several readers (the sky dome reads this in its
    own useFrame). Keeps every lightning-driven effect on one clock. */

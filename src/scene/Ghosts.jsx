@@ -129,6 +129,7 @@ export default function Ghosts({ treeGeos, treeDefs }){
   useEffect(() => { slow.current = reduced(); }, []);
 
   useFrame(({ clock }) => {
+    if (typeof window !== 'undefined' && window.__MAFIAS_STATIC__ !== false) return;
     const t = clock.elapsedTime;
     const g = windGust(t);
     const mot = slow.current ? 0.35 : 1;
