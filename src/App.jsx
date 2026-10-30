@@ -252,6 +252,7 @@ export default function App(){
       document.body.classList.remove('mafias-entering');
       document.documentElement.classList.remove('mafias-entering');
       window.dispatchEvent(new CustomEvent('mafias:entered'));
+      try{ window.dispatchEvent(new CustomEvent('mafias:smoke-show-path')); }catch(e){}
       /* The smoke field is temporary (≈1.2 screens of overdraw): once its
          fade has landed, unmount it and release the particles. This is not
          the audio cleanup — the sting has already finished on its own and
@@ -300,6 +301,7 @@ export default function App(){
       .call(()=>{
         setIntroState(PHASE.SMOKE_EXPAND);
         mountIntroSmoke();
+        try{ window.dispatchEvent(new CustomEvent('mafias:smoke-hide-path')); }catch(e){}
       },null,.45)
       /* ramp = how far the cloud has grown; alpha = how thick it is. The
          thickness lands early (1.30 s) so the screen is genuinely opaque
@@ -345,20 +347,27 @@ export default function App(){
          density for a beat, and only then does the logo rise out of the smoke
          — the layer paints nothing behind it, so the mark reads as coming out
          of the crimson fog rather than sitting on a dark card. */
-      .addLabel('logo-reveal',2.7)
-      .to(welcomeRef.current,{opacity:0,duration:.3,ease:'power1.out'},2.7)
-      .call(()=>setIntroState(PHASE.LOGO),null,2.7)
-      .to(logoLayerRef.current,{opacity:1,duration:.2,ease:'none'},2.7)
+      .addLabel('logoReveal',2.65)
+      .addLabel('logo-reveal',2.65)
+      .call(()=>{
+        // ensure audio is playing at logo reveal moment
+        if(sting.current && !sting.current.playing()){
+          try{sting.current.seek(0); sting.current.play();}catch(e){/* ignore */}
+        }
+      },null,2.65)
+      .to(welcomeRef.current,{opacity:0,duration:.3,ease:'power1.out'},2.65)
+      .call(()=>setIntroState(PHASE.LOGO),null,2.65)
+      .to(logoLayerRef.current,{opacity:1,duration:.2,ease:'none'},2.65)
       .fromTo(logoRef.current,
         {opacity:0,scale:.94,y:14,'--logo-blur':'10px'},
         {opacity:1,scale:1,y:0,'--logo-blur':'0px',
-          duration:.45,ease:'power3.out',immediateRender:false},3.0)
+          duration:.45,ease:'power3.out',immediateRender:false},2.9)
       /* restrained red rim-light pulse — its own layer, so the logo's blur
          and the glow never fight over one filter property */
       .fromTo(logoGlowRef.current,
         {opacity:0,scale:.82},
-        {opacity:1,scale:1,duration:.5,ease:'sine.out',immediateRender:false},3.05)
-      .to(logoGlowRef.current,{opacity:.55,scale:1.08,duration:.65,ease:'sine.inOut'},3.55)
+        {opacity:1,scale:1,duration:.5,ease:'sine.out',immediateRender:false},2.95)
+      .to(logoGlowRef.current,{opacity:.55,scale:1.08,duration:.65,ease:'sine.inOut'},3.45)
       /* the cloud keeps expanding and holds full density through 3.20 s … */
       .to(smoke,{ramp:1.45,duration:.5,ease:'sine.out',onUpdate:pushSmoke},2.8)
       /* … then thins behind the mark so the logo stays legible */
@@ -409,10 +418,16 @@ export default function App(){
 
   const handleRegisterClick = useCallback((e)=>{
     e.preventDefault();
+    e.stopPropagation();
     if(batsFlying) return;
     setBatsFlying(true);
     setTimeout(()=>{
-      navigate('/register');
+      try {
+        navigate('/register');
+      } catch (err) {
+        console.error('Navigation failed:', err);
+        window.location.href = '/register';
+      }
     }, 500);
   },[batsFlying, navigate]);
 
@@ -469,7 +484,7 @@ export default function App(){
         {showRegister && (
           <div className="logo-intro__register-wrap" style={{position:'relative',marginTop:'18px'}}>
             <RegistrationSmoke className="logo-intro__smoke logo-intro__smoke--button" />
-            <button onClick={handleRegisterClick} className="register-cta" disabled={batsFlying}>
+            <button onClick={(e)=>{ e.preventDefault(); e.stopPropagation(); if(batsFlying) return; setBatsFlying(true); setTimeout(()=>{ try{ window.location.href = '/register'; }catch(err){ try{ navigate('/register'); }catch(e2){ window.location.assign('/register'); } } }, 400); }} className="register-cta" disabled={batsFlying} type="button">
               <span className="register-cta__line">REGISTER</span>
               <span className="register-cta__accent" aria-hidden="true" />
             </button>

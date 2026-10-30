@@ -287,17 +287,44 @@ function Bat({start,scale=1,speed=1,phase=0}){
 
 function Smoke(){
   const group=useRef();
-  const items=useMemo(()=>Array.from({length:MOBILE?26:48},()=>({
-    x:(Math.random()-.5)*18,y:-.05+Math.random()*1.2,z:-2-Math.random()*13,
-    size:.55+Math.random()*1.7,phase:Math.random()*Math.PI*2,speed:.12+Math.random()*.24,opacity:.15+Math.random()*.24
-  })),[]);
+  const items=useMemo(()=>{
+    const arr=[];
+    const count = MOBILE?50:90;
+    for(let i=0;i<count;i++){
+      const t = i/count;
+      // concentrate heavily along the pathway (centered near x=0)
+      const x = (Math.random()-.5)*1.8;
+      const z = 4.5 - t*26 + (Math.random()-.5)*1.2;
+      const y = -0.05 + Math.random()*1.4;
+      arr.push({
+        x,y,z,
+        size: 0.8 + Math.random()*2.4,
+        phase: Math.random()*Math.PI*2,
+        speed: 0.06 + Math.random()*0.28,
+        opacity: 0.22 + Math.random()*0.38,
+        drift: 0.25 + Math.random()*0.5
+      });
+    }
+    return arr;
+  },[]);
   const texture=useMemo(()=>{
     try{
-      const canvas=document.createElement('canvas');canvas.width=128;canvas.height=128;
+      const canvas=document.createElement('canvas');canvas.width=256;canvas.height=256;
       const ctx=canvas.getContext('2d');if(!ctx)return null;
-      const g=ctx.createRadialGradient(64,64,2,64,64,62);
-      g.addColorStop(0,'rgba(210,18,42,0.65)');g.addColorStop(.24,'rgba(160,12,34,0.34)');g.addColorStop(.58,'rgba(100,8,25,0.12)');g.addColorStop(1,'rgba(50,0,12,0)');
-      ctx.fillStyle=g;ctx.fillRect(0,0,128,128);
+      const g=ctx.createRadialGradient(128,128,4,128,128,124);
+      g.addColorStop(0,'rgba(230,25,55,0.75)');
+      g.addColorStop(0.18,'rgba(190,18,42,0.52)');
+      g.addColorStop(0.42,'rgba(140,12,32,0.28)');
+      g.addColorStop(0.72,'rgba(80,6,18,0.14)');
+      g.addColorStop(1,'rgba(40,0,10,0)');
+      ctx.fillStyle=g;ctx.fillRect(0,0,256,256);
+      // add some noise for softer edges
+      for(let i=0;i<800;i++){
+        const x=Math.random()*256,y=Math.random()*256;
+        const a=0.01+Math.random()*0.03;
+        ctx.fillStyle = Math.random()>0.5 ? `rgba(220,30,50,${a})` : `rgba(0,0,0,${a})`;
+        ctx.fillRect(x,y,1+Math.random()*2,1+Math.random()*2);
+      }
       return new THREE.CanvasTexture(canvas);
     }catch(e){return null;}
   },[]);
@@ -307,19 +334,18 @@ function Smoke(){
     if(!group.current)return;const t=clock.elapsedTime;
     group.current.children.forEach((sprite,i)=>{
       const d=items[i];if(!d)return;
-      const cycle=(t*d.speed+d.phase)%2.6,u=cycle/2.6;
-      sprite.position.y=d.y+cycle;
-      sprite.position.x=d.x+Math.sin(t*.22+d.phase)*.55;
-      // fade in as it rises, fade out at the top so the loop never pops
-      const rise=Math.min(1,u*7),fall=Math.min(1,(1-u)*7);
-      // fade out when the camera flies through it so it never washes the screen
+      const cycle=(t*d.speed+d.phase)%3.2,u=cycle/3.2;
+      sprite.position.y=d.y+cycle*0.8;
+      sprite.position.x=d.x+Math.sin(t*.16+d.phase)*d.drift*0.6 + Math.cos(t*.09+d.phase)*0.3;
+      sprite.position.z = d.z + Math.sin(t*.12+d.phase)*0.4;
+      const rise=Math.min(1,u*5),fall=Math.min(1,(1-u)*4);
       const dist=sprite.position.distanceTo(camera.position);
-      const near=THREE.MathUtils.smoothstep(dist,1.6,5.5);
-      sprite.material.rotation=Math.sin(t*.18+d.phase)*.25;
-      sprite.material.opacity=d.opacity*(.7+.3*Math.sin(t*.6+d.phase))*rise*fall*near;
+      const near=THREE.MathUtils.smoothstep(dist,0.8,8.0);
+      sprite.material.rotation=Math.sin(t*.14+d.phase)*0.4;
+      sprite.material.opacity=d.opacity*(0.6+0.4*Math.sin(t*.5+d.phase))*rise*fall*near;
     });
   });
-  return <group ref={group}>{items.map((d,i)=><sprite key={i} position={[d.x,d.y,d.z]} scale={[d.size*1.65,d.size,d.size]}><spriteMaterial map={texture} color="#cf203a" transparent opacity={d.opacity} depthWrite={false} blending={THREE.AdditiveBlending}/></sprite>)}</group>;
+  return <group ref={group}>{items.map((d,i)=><sprite key={i} position={[d.x,d.y,d.z]} scale={[d.size*2.0,d.size*1.2,d.size]}><spriteMaterial map={texture} color="#e41a36" transparent opacity={d.opacity} depthWrite={false} blending={THREE.AdditiveBlending} fog={true}/></sprite>)}</group>;
 }
 
 function Portal({refObj,lightA,lightB,materialRef}){return <group ref={refObj} name="mafias-portal" position={[0,2.2,PORTAL_Z0]}>
@@ -334,6 +360,7 @@ function Portal({refObj,lightA,lightB,materialRef}){return <group ref={refObj} n
 function GraveyardScene(){
   const {camera,scene,gl}=useThree();
   const portal=useRef();
+  const pathRef=useRef();
   const scrollTarget=useRef(0),scrollCurrent=useRef(0),postEnter=useRef(false),enterZ=useRef(0),diving=useRef(false),reduced=useRef(false),started=useRef(false),reached=useRef(false);
   const portalLightA=useRef(null),portalLightB=useRef(null),portalMaterial=useRef(null);
   const stormApi=useRef(null);
@@ -611,7 +638,9 @@ function GraveyardScene(){
     // the smoke has covered the frame: hide the orb geometry itself so the
     // cover is total (on the scroll-arrival path the orb sits nearer the
     // lens than the smoke wall and would otherwise read through it)
-    const veil=()=>{if(portal.current)portal.current.visible=false;};
+    const veil=()=>{if(portal.current)portal.current.visible=false; if(pathRef.current)pathRef.current.visible=false;};
+    const hidePath=()=>{if(pathRef.current)pathRef.current.visible=false;};
+    const showPath=()=>{if(pathRef.current)pathRef.current.visible=true;};
     // hand camera control back to the scrollbar without a jump
     const entered=()=>{
       diving.current=false;
@@ -619,6 +648,7 @@ function GraveyardScene(){
       enterZ.current=camera.position.z;
       gsap.killTweensOf(camera.position);
       if(portal.current)portal.current.visible=true;   // the graveyard is back
+      if(pathRef.current)pathRef.current.visible=true;
     };
     const onScroll=(event)=>{scrollTarget.current=event.detail?.progress ?? 0;};
     window.addEventListener('mafias:enter',enter);
@@ -626,6 +656,8 @@ function GraveyardScene(){
     window.addEventListener('mafias:portal-veil',veil);
     window.addEventListener('mafias:entered',entered);
     window.addEventListener('mafias:scroll',onScroll);
+    window.addEventListener('mafias:smoke-hide-path',hidePath);
+    window.addEventListener('mafias:smoke-show-path',showPath);
     return()=>{
       window.removeEventListener('mafias:stop-audio',freezeAudio);
       window.removeEventListener('mafias:enter',enter);
@@ -633,6 +665,8 @@ function GraveyardScene(){
       window.removeEventListener('mafias:portal-veil',veil);
       window.removeEventListener('mafias:entered',entered);
       window.removeEventListener('mafias:scroll',onScroll);
+      window.removeEventListener('mafias:smoke-hide-path',hidePath);
+      window.removeEventListener('mafias:smoke-show-path',showPath);
       gsap.killTweensOf(camera.position);
       if(portal.current)gsap.killTweensOf(portal.current.scale);
       scene.fog=null;
@@ -646,6 +680,7 @@ function GraveyardScene(){
     updateWind(t); // shared time source: bark + grass bend shaders
     scrollCurrent.current=THREE.MathUtils.damp(scrollCurrent.current,scrollTarget.current,3.2,delta);
     const p=scrollCurrent.current;
+    const pTarget = scrollTarget.current;
 
     /* During the push GSAP owns the camera position — we only keep it
        aimed at wherever the orb actually is (it travels with scroll). */
@@ -683,7 +718,7 @@ function GraveyardScene(){
       if(portalLightA.current)portalLightA.current.intensity=30+a*34;
       /* Story 02 and 03 have been read by the time the scroll bottom is
          reached: only then does the camera dive into the red orb. */
-      if(!reached.current&&p>=APPROACH_DONE){
+      if(!reached.current && (p>=APPROACH_DONE || pTarget>=APPROACH_DONE)){
         reached.current=true;
         window.dispatchEvent(new CustomEvent('mafias:enter-auto'));
       }
@@ -707,7 +742,7 @@ function GraveyardScene(){
 
     {/* G. terrain: displaced soil with texture variation + a trodden path */}
     <mesh geometry={A.groundGeo} receiveShadow material={A.mats.ground}/>
-    <mesh geometry={A.pathGeo} receiveShadow material={A.mats.path}/>
+    <mesh ref={pathRef} geometry={A.pathGeo} receiveShadow material={A.mats.path}/>
 
     {/* G. ground clutter */}
     <Instances geometry={A.rockGeo} material={A.mats.soil} data={rockData} colors receiveShadow/>
