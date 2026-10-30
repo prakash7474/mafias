@@ -409,7 +409,7 @@ export default function App(){
 
   useEffect(()=>{
     if(introState === PHASE.LOGO || entered){
-      const t = setTimeout(()=>setShowRegister(true), 2100);
+      const t = setTimeout(()=>setShowRegister(true), 2000);
       return ()=>clearTimeout(t);
     }else{
       setShowRegister(false);
