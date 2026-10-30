@@ -53,7 +53,59 @@ const SIMPLEX_GLSL = `
     return 130.0*dot(m,g);
   }`;
 
+function createProceduralTextures(){
+  try{
+    const size = 256;
+    const diffuseCanvas = document.createElement('canvas');
+    diffuseCanvas.width = diffuseCanvas.height = size;
+    const dctx = diffuseCanvas.getContext('2d');
+    if(!dctx) return null;
+    const dg = dctx.createLinearGradient(0,0,0,size);
+    dg.addColorStop(0, '#b5c08a');
+    dg.addColorStop(0.5, '#9aa277');
+    dg.addColorStop(1, '#7a8458');
+    dctx.fillStyle = dg;
+    dctx.fillRect(0,0,size,size);
+    // add variation
+    for(let i=0;i<2000;i++){
+      const x=Math.random()*size,y=Math.random()*size;
+      const a=0.02+Math.random()*0.04;
+      dctx.fillStyle = Math.random()>0.5?`rgba(140,150,90,${a})`:`rgba(110,120,70,${a})`;
+      dctx.fillRect(x,y,2,2);
+    }
+    const diffuse = new THREE.CanvasTexture(diffuseCanvas);
+    diffuse.colorSpace = THREE.SRGBColorSpace;
+    diffuse.anisotropy = 4;
+    diffuse.wrapS = diffuse.wrapT = THREE.ClampToEdgeWrapping;
+
+    const alphaCanvas = document.createElement('canvas');
+    alphaCanvas.width = alphaCanvas.height = size;
+    const actx = alphaCanvas.getContext('2d');
+    if(!actx) return null;
+    actx.fillStyle = 'white';
+    actx.fillRect(0,0,size,size);
+    // create blade shape alpha
+    actx.fillStyle = 'black';
+    actx.beginPath();
+    actx.moveTo(size*0.3, size);
+    actx.lineTo(size*0.5, size*0.1);
+    actx.lineTo(size*0.7, size);
+    actx.closePath();
+    actx.fill();
+    const alpha = new THREE.CanvasTexture(alphaCanvas);
+    alpha.colorSpace = THREE.NoColorSpace;
+    alpha.wrapS = alpha.wrapT = THREE.ClampToEdgeWrapping;
+    return { diffuse, alpha };
+  }catch(e){
+    return null;
+  }
+}
+
 function loadBladeTextures(){
+  try{
+    const proc = createProceduralTextures();
+    if(proc) return Promise.resolve(proc);
+  }catch(e){}
   const url = (n) => `${import.meta.env.BASE_URL}textures/${n}`;
   const load = (u) => new Promise((res, rej) => texLoader.load(u, res, undefined, rej));
   return Promise.all([load(url('blade_diffuse.jpg')), load(url('blade_alpha.jpg'))])

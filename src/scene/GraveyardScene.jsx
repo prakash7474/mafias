@@ -20,15 +20,24 @@ import SkullStatue from '../components/SkullStatue.jsx';
 import IntroSmoke from './IntroSmoke.jsx';
 import { introSmoke } from './introSmoke.js';
 
-const isSmall=()=>typeof window!=='undefined'&&window.innerWidth<700;
+const isSmall=()=>{
+  if(typeof window==='undefined') return false;
+  const ua = (navigator.userAgent || '').toLowerCase();
+  const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile/i.test(ua);
+  const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
+  const isSmallScreen = window.innerWidth < 1024;
+  return isMobileUA || (isTouch && isSmallScreen) || window.innerWidth < 820;
+};
 const prefersReduced=()=>typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
-const MOBILE=isSmall();
-/* Quality preset: fewer lights/shadows/particles and a smaller key shadow
-   map on phones, full treatment on desktop. */
-const Q=MOBILE
-  ?{shadow:1024,spotShadows:false,spots:2,graveRows:18,backGraves:8,trees:11,blades:4200,rocks:70,sparks:35,groundSeg:64,redAccent:false}
-  :{shadow:2048,spotShadows:true,spots:3,graveRows:26,backGraves:14,trees:17,blades:12000,rocks:150,sparks:70,groundSeg:96,redAccent:true};
+function getQuality(){
+  const MOBILE=isSmall();
+  /* Quality preset: fewer lights/shadows/particles and a smaller key shadow
+     map on phones, full treatment on desktop. */
+  return MOBILE
+    ?{shadow:1024,spotShadows:false,spots:2,graveRows:16,backGraves:6,trees:10,blades:2800,rocks:60,sparks:25,groundSeg:48,redAccent:false,grass:false,wind:false}
+    :{shadow:2048,spotShadows:true,spots:3,graveRows:26,backGraves:14,trees:17,blades:12000,rocks:150,sparks:70,groundSeg:96,redAccent:true,grass:true,wind:true};
+}
 
 // Scroll-driven camera path: z = CAM_START + CAM_TRAVEL * progress (travel is negative).
 const CAM_START=12, CAM_TRAVEL=-18, LOOK_Y0=1.4, LOOK_Y1=.7, LOOK_Z0=-4, LOOK_Z1=-6;
@@ -102,6 +111,7 @@ function Spot({pos,target,angle,penumbra,intensity,distance,color,castShadow,map
 }
 
 function SceneLights(){
+  const Q = useMemo(()=>getQuality(),[]);
   const keyRef=useRef();
   // make sure the shadow frustum really covers the graveyard
   useEffect(()=>{
@@ -117,25 +127,25 @@ function SceneLights(){
       l.shadow.map?.dispose();
       l.shadow.map=null;
     }
-  },[]);
+  },[Q.shadow]);
   return <>
     {/* B. controlled ambient — reveals shape without flattening */}
-    <ambientLight intensity={.042} color="#3d4660"/>
-    <hemisphereLight intensity={.3} color="#5e6d90" groundColor="#0a0a0e"/>
+    <ambientLight intensity={.06} color="#4a5575"/>
+    <hemisphereLight intensity={.38} color="#7c8bb8" groundColor="#0a0c14"/>
 
     {/* A. moonlight: cool key from upper-left, casts coherent shadows */}
     <directionalLight
       ref={keyRef}
-      position={[-11,15,7]} intensity={2.8} color="#b9c6e2"
+      position={[-16,24,10]} intensity={3.2} color="#c9d8ff"
       castShadow
       shadow-mapSize-width={Q.shadow} shadow-mapSize-height={Q.shadow}
-      shadow-camera-left={-19} shadow-camera-right={19}
-      shadow-camera-top={19} shadow-camera-bottom={-19}
-      shadow-camera-near={2} shadow-camera-far={70}
-      shadow-bias={-.0004} shadow-normalBias={.035}/>
+      shadow-camera-left={-24} shadow-camera-right={24}
+      shadow-camera-top={24} shadow-camera-bottom={-24}
+      shadow-camera-near={1} shadow-camera-far={90}
+      shadow-bias={-.0003} shadow-normalBias={.03}/>
 
     {/* C. tree rim light: back-right, aligned with the visible moon, no shadow */}
-    <directionalLight position={[16,10,-26]} intensity={1} color="#7f96cc"/>
+    <directionalLight position={[18,16,-28]} intensity={1.4} color="#9bb0ff"/>
 
     {/* D. graveyard spotlights: path pool + two grave highlights */}
     <Spot pos={[-1.5,7.5,6.5]} target={[.6,-.2,1.2]} angle={.5} penumbra={.95}
@@ -287,9 +297,10 @@ function Bat({start,scale=1,speed=1,phase=0}){
 
 function Smoke(){
   const group=useRef();
+  const mobile = typeof window!=='undefined' && (isSmall());
   const items=useMemo(()=>{
     const arr=[];
-    const count = MOBILE?50:90;
+    const count = mobile?36:90;
     for(let i=0;i<count;i++){
       const t = i/count;
       // concentrate heavily along the pathway (centered near x=0)
@@ -306,7 +317,7 @@ function Smoke(){
       });
     }
     return arr;
-  },[]);
+  },[mobile]);
   const texture=useMemo(()=>{
     try{
       const canvas=document.createElement('canvas');canvas.width=256;canvas.height=256;
@@ -364,6 +375,8 @@ function GraveyardScene(){
   const scrollTarget=useRef(0),scrollCurrent=useRef(0),postEnter=useRef(false),enterZ=useRef(0),diving=useRef(false),reduced=useRef(false),started=useRef(false),reached=useRef(false);
   const portalLightA=useRef(null),portalLightB=useRef(null),portalMaterial=useRef(null);
   const stormApi=useRef(null);
+  const Q = useMemo(()=>getQuality(),[]);
+  const MOBILE = useMemo(()=>isSmall(),[]);
 
   /* ---- shared assets: built once per quality preset, disposed on unmount ---- */
   const bendBark=useRef({uniforms:null});
@@ -580,7 +593,7 @@ function GraveyardScene(){
     return Object.entries(byV).map(([v,data])=>({geometry:A.treeGeos[+v],data}));
   },[treeDefs,A]);
 
-  const bats=useMemo(()=>Array.from({length:MOBILE?10:16},()=>({
+  const bats=useMemo(()=>Array.from({length:(isSmall())?6:16},()=>({
     start:[(Math.random()-.5)*13,3.2+Math.random()*4,-10.5-Math.random()*8],
     scale:.22+Math.random()*.3,speed:.65+Math.random()*.9,phase:Math.random()*6
   })),[]);
@@ -677,7 +690,7 @@ function GraveyardScene(){
 
   useFrame(({pointer,clock},delta)=>{
     const t=clock.elapsedTime;
-    updateWind(t); // shared time source: bark + grass bend shaders
+    if(Q.wind !== false) updateWind(t); // shared time source: bark + grass bend shaders
     scrollCurrent.current=THREE.MathUtils.damp(scrollCurrent.current,scrollTarget.current,3.2,delta);
     const p=scrollCurrent.current;
     const pTarget = scrollTarget.current;
@@ -748,7 +761,7 @@ function GraveyardScene(){
     <Instances geometry={A.rockGeo} material={A.mats.soil} data={rockData} colors receiveShadow/>
 
     {/* Phase 3–4: instanced grass blades (ZIP shader, shared wind config) */}
-    <GrassField patches={grassField.patches} exclude={grassField.exclude} count={grassField.count} seed={101}/>
+    {Q.grass !== false && <GrassField patches={grassField.patches} exclude={grassField.exclude} count={grassField.count} seed={101}/>}
 
     {/* Phase 2–4: instanced dead trees + graveyard stonework */}
     {treeGroups.map((g,i)=><Instances key={`t${i}`} geometry={g.geometry} material={A.mats.bark} data={g.data} castShadow receiveShadow/>)}

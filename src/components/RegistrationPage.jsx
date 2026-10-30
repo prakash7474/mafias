@@ -62,10 +62,23 @@ export default function RegistrationPageInner() {
       }
     >
       <FlyingBats className="registration-bats" />
+      <FlyingBats className="registration-bats registration-bats--alt" />
+      <FlyingBats className="registration-bats" style={{zIndex:5}} />
       <RegistrationSmoke
         className={
           (reduced || compact) ? 'registration-smoke reg-smoke-compact' : 'registration-smoke'
         }
+      />
+      <RegistrationSmoke
+        className={
+          (reduced || compact) ? 'registration-smoke reg-smoke-compact registration-smoke--extra' : 'registration-smoke registration-smoke--extra'
+        }
+      />
+      <RegistrationSmoke
+        className={
+          (reduced || compact) ? 'registration-smoke reg-smoke-compact' : 'registration-smoke'
+        }
+        style={{zIndex:6,opacity:0.8}}
       />
       <div className="registration-fog" aria-hidden="true" />
 

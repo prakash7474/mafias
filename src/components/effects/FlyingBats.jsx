@@ -13,8 +13,8 @@ function mulberry32(seed) {
   };
 }
 
-const BATS_DESKTOP = 10;
-const BATS_MOBILE = 4;
+const BATS_DESKTOP = 16;
+const BATS_MOBILE = 8;
 
 export default function FlyingBats({ className }) {
   const hostRef = useRef(null);

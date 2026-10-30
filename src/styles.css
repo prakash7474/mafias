@@ -167,9 +167,11 @@ body.mafias-entering .enter{transition:border-color .25s}.enter:focus-visible{ou
 .character-preview__hint{font-size:9px;letter-spacing:.22em;color:#7a6f74;text-transform:uppercase}
 .character-preview__caption{margin:0;font-size:9px;letter-spacing:.2em;color:#b5a7b2;text-align:center;text-transform:uppercase;max-width:280px;line-height:1.5}
 .registration-fog{position:absolute;inset:0;z-index:1;pointer-events:none;background:radial-gradient(ellipse at 50% 40%,rgba(120,8,26,.28) 0%,transparent 55%),radial-gradient(ellipse at 18% 82%,rgba(120,8,26,.22) 0%,transparent 45%),radial-gradient(ellipse at 82% 82%,rgba(120,8,26,.22) 0%,transparent 45%);mix-blend-mode:multiply}
-.registration-smoke{position:absolute;inset:0;z-index:2;pointer-events:none;overflow:hidden;contain:strict}
+.registration-smoke{position:absolute;inset:0;z-index:1;pointer-events:none;overflow:hidden;contain:strict}
+.registration-smoke--extra{z-index:1;opacity:0.9}
 .registration-smoke.reg-smoke-compact .reg-smoke-wisp{display:none}
-.registration-bats{position:absolute;inset:0;z-index:2;pointer-events:none}
+.registration-bats{position:absolute;inset:0;z-index:1;pointer-events:none}
+.registration-bats--alt{z-index:1;opacity:0.9}
 .registration-foot{position:fixed;bottom:22px;left:26px;right:26px;display:flex;justify-content:space-between;color:#b5a7b2;font-size:9px;letter-spacing:.22em;z-index:5;text-transform:uppercase}
 @media(prefers-reduced-motion:reduce){.reg-smoke-wisp{display:none!important}.reg-bat-instance{display:none!important}.registration-fog{mix-blend-mode:normal}.character-preview__figure--leaving,.character-preview__figure--enter{transition:none}.reg-submit__spinner{animation-duration:.01ms!important}}
 .registration-smoke--compact .reg-smoke-wisp{display:none}
@@ -196,6 +198,10 @@ body.mafias-entering .enter{transition:border-color .25s}.enter:focus-visible{ou
   0%{opacity:0;transform:translate(-50%,-50%) scale(.6)}
   20%{opacity:1}
   100%{opacity:0;transform:translate(calc(-50% + (var(--i)-2.5)*60px), calc(-50% - 80px)) scale(1.2)}
+}
+@keyframes registerFadeIn{
+  0%{opacity:0;transform:translateY(20px) scale(0.95)}
+  100%{opacity:1;transform:translateY(0) scale(1)}
 }
 
 

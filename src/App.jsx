@@ -409,7 +409,7 @@ export default function App(){
 
   useEffect(()=>{
     if(introState === PHASE.LOGO || entered){
-      const t = setTimeout(()=>setShowRegister(true), 1500);
+      const t = setTimeout(()=>setShowRegister(true), 2100);
       return ()=>clearTimeout(t);
     }else{
       setShowRegister(false);
@@ -482,7 +482,7 @@ export default function App(){
       <nav className="logo-intro__actions" aria-label="After the MAFIAS reveal">
         <span className="logo-intro__tagline">ENTER THE INNER CIRCLE</span>
         {showRegister && (
-          <div className="logo-intro__register-wrap" style={{position:'relative',marginTop:'18px'}}>
+          <div className="logo-intro__register-wrap" style={{position:'relative',marginTop:'18px',animation:'registerFadeIn 0.5s ease-out'}}>
             <RegistrationSmoke className="logo-intro__smoke logo-intro__smoke--button" />
             <button onClick={(e)=>{ e.preventDefault(); e.stopPropagation(); if(batsFlying) return; setBatsFlying(true); setTimeout(()=>{ try{ window.location.href = '/register'; }catch(err){ try{ navigate('/register'); }catch(e2){ window.location.assign('/register'); } } }, 400); }} className="register-cta" disabled={batsFlying} type="button">
               <span className="register-cta__line">REGISTER</span>

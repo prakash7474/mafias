@@ -29,7 +29,7 @@ function RegistrationSmokeRaw({ className }) {
 
     const rect = host.getBoundingClientRect();
     const inset = [0, 0, Math.max(rect.width, 1), Math.max(rect.height, 1)];
-    const count = compact ? 2 : 3;
+    const count = compact ? 6 : 10;
 
     for (let i = 0; i < count; i++) {
       const span = document.createElement('span');
@@ -38,26 +38,26 @@ function RegistrationSmokeRaw({ className }) {
       span.style.cssText =
         'position:absolute;top:0;left:0;pointer-events:none;will-change:transform,opacity;border-radius:50%;overflow:visible;mix-blend-mode:screen';
       span.style.background =
-        'radial-gradient(circle,rgba(178,24,46,0.3) 0%,rgba(120,8,26,0.18) 35%,rgba(50,2,12,0) 72%)';
-      span.style.filter = 'blur(' + (18 + Math.random() * 16) + 'px)';
-      span.style.width = (70 + Math.random() * 60) + 'px';
-      span.style.height = (70 + Math.random() * 60) + 'px';
-      span.style.marginLeft = (-35 - Math.random() * 30) + 'px';
-      span.style.marginTop = (-35 - Math.random() * 30) + 'px';
-      span.style.left = (8 + Math.random() * 16) + '%';
-      span.style.top = (40 + Math.random() * 30) + '%';
+        'radial-gradient(circle,rgba(220,40,70,0.6) 0%,rgba(160,20,40,0.35) 40%,rgba(80,10,20,0) 75%)';
+      span.style.filter = 'blur(' + (14 + Math.random() * 28) + 'px)';
+      span.style.width = (110 + Math.random() * 140) + 'px';
+      span.style.height = (110 + Math.random() * 140) + 'px';
+      span.style.marginLeft = (-55 - Math.random() * 70) + 'px';
+      span.style.marginTop = (-55 - Math.random() * 70) + 'px';
+      span.style.left = (Math.random() * 95) + '%';
+      span.style.top = (Math.random() * 95) + '%';
       span.style.opacity = '0';
       host.appendChild(span);
 
       const dur = 7 + i * 1.4 + Math.random() * 2;
       const delay = i * (6 + Math.random() * 4);
       const keyframes = [
-        { opacity: 0, transform: 'translate(-4px,-6px) scale(0.7)' },
+        { opacity: 0, transform: 'translate(-4px,-6px) scale(0.6)' },
         {
-          opacity: 0.3,
-          transform: 'translate(+8px,-12px) scale(1.05)',
+          opacity: 0.5,
+          transform: 'translate(+10px,-15px) scale(1.1)',
         },
-        { opacity: 0, transform: 'translate(+24px,-24px) scale(1.25)' },
+        { opacity: 0, transform: 'translate(+30px,-30px) scale(1.4)' },
       ];
       const animation = span.animate(keyframes, {
         duration: dur * 1000,
