@@ -13,8 +13,9 @@ function mulberry32(seed) {
   };
 }
 
-const BATS_DESKTOP = 16;
-const BATS_MOBILE = 8;
+const BATS_DESKTOP = 12;
+const BATS_TABLET = 9;
+const BATS_MOBILE = 6;
 
 export default function FlyingBats({ className }) {
   const hostRef = useRef(null);
@@ -28,8 +29,10 @@ export default function FlyingBats({ className }) {
     if (!host) return () => {};
 
     const rect = host.getBoundingClientRect();
-    const compact = window.innerWidth < 820;
-    const count = compact ? BATS_MOBILE : BATS_DESKTOP;
+    const width = window.innerWidth;
+    const compact = width < 820;
+    const tablet = width >= 820 && width < 1100;
+    const count = compact ? BATS_MOBILE : tablet ? BATS_TABLET : BATS_DESKTOP;
 
     // Create bats in memory, attach to host
     const batEls = [];
@@ -41,9 +44,11 @@ export default function FlyingBats({ className }) {
         'position:absolute;top:0;left:0;width:120px;height:60px;pointer-events:none;will-change:transform,opacity;overflow:visible';
       el.innerHTML =
         '<svg viewBox="0 0 120 60" style="display:block;width:100%;height:100%;overflow:visible" aria-hidden="true">' +
-        '<path class="reg-bat__wing-l" d="M60 30 L28 16 L48 22 L18 12 L50 24 L78 24 L62 36 L44 34 Z" fill="#07070a" stroke="#020204" stroke-width="1.2"/>' +
-        '<path class="reg-bat__wing-r" d="M60 30 L92 16 L72 22 L102 12 L70 24 L42 24 L58 36 L76 34 Z" fill="#07070a" stroke="#020204" stroke-width="1.2"/>' +
-        '<ellipse class="reg-bat__body" cx="60" cy="32" rx="5" ry="7" fill="#050509"/>' +
+        '<path class="reg-bat__wing-l" d="M60 30 L28 16 L48 22 L18 12 L50 24 L78 24 L62 36 L44 34 Z" fill="#0a0a0f" stroke="#030305" stroke-width="1.2"/>' +
+        '<path class="reg-bat__wing-r" d="M60 30 L92 16 L72 22 L102 12 L70 24 L42 24 L58 36 L76 34 Z" fill="#0a0a0f" stroke="#030305" stroke-width="1.2"/>' +
+        '<ellipse class="reg-bat__body" cx="60" cy="32" rx="5" ry="7" fill="#060608"/>' +
+        '<circle cx="58" cy="30" r="1.2" fill="#E12A45" opacity="0.9"/>' +
+        '<circle cx="62" cy="30" r="1.2" fill="#E12A45" opacity="0.9"/>' +
         '</svg>';
       host.appendChild(el);
       batEls.push(el);
@@ -51,19 +56,16 @@ export default function FlyingBats({ className }) {
 
     // Seed bat parameters
     const rng = mulberry32(9021);
-    const seeds = batEls.map(() => ({
-      x: compact
-        ? rect.width * (0.05 + rng() * 0.55)
-        : -12 + rng() * (rect.width + 24),
-      y: compact
-        ? rect.height * (0.18 + rng() * 0.5)
-        : rect.height * (0.06 + rng() * 0.7),
-      speed: 0.45 + rng() * 0.5,
-      flapSpeed: 4 + rng() * 4,
-      size: compact ? 0.6 + rng() * 0.4 : 0.7 + rng() * 0.9,
-      dir: rng() < 0.5 ? 1 : -1,
-      drift: compact ? 0.25 : 0.4 + rng() * 0.6,
-      phase: rng() * Math.PI * 2,
+    const seeds = batEls.map((_, i) => ({
+      x: rng() < 0.5 ? -40 - rng() * 80 : rect.width + 40 + rng() * 80,
+      y: rect.height * (0.1 + rng() * 0.6),
+      vx: (rng() < 0.5 ? -1 : 1) * (0.25 + rng() * 0.45),
+      vy: (rng() - 0.5) * (0.12 + rng() * 0.18),
+      flapSpeed: 5 + rng() * 6,
+      size: compact ? 0.6 + rng() * 0.4 : 0.7 + rng() * 0.8,
+      dir: rng() < 0.5 ? -1 : 1,
+      wave: rng() * Math.PI * 2,
+      t: rng() * 10,
     }));
 
     let last = performance.now();
@@ -75,25 +77,29 @@ export default function FlyingBats({ className }) {
 
       for (let i = 0; i < count; i++) {
         const b = seeds[i];
-        const s = Math.max(8, 60 * b.size);
-        const x =
-          b.x +
-          b.dir * (b.drift * Math.sin(t * 0.4 + i) + ((t * 0.35 * b.dir) % 12));
-        const y = b.y + Math.sin(t * 1.1 + i) * (compact ? 6 : 12);
-        const flap = Math.sin(t * b.flapSpeed + i * 1.3);
-        const rot = Math.sin(t * 0.9 + i * 0.6) * 0.25 * b.dir;
+        b.t += dt;
+        b.x += b.vx * (60 * dt) + Math.sin(t * 0.6 + i + b.wave) * (0.4 + b.dir * 0.3);
+        b.y += b.vy * (40 * dt) + Math.cos(t * 0.9 + i) * (2 + i % 2);
+
+        if (b.x < -120) b.x = rect.width + 80;
+        if (b.x > rect.width + 120) b.x = -80;
+        if (b.y < -40) b.y = rect.height * 0.8;
+        if (b.y > rect.height + 40) b.y = rect.height * 0.1;
+
+        const flap = Math.sin(t * b.flapSpeed + i * 1.7);
+        const rot = Math.sin(t * 0.8 + i * 0.5) * 0.18 * b.dir;
 
         const el = batEls[i];
         if (!el) continue;
 
         el.style.transform =
-          'translate(' + x + 'px,' + y + 'px) scale(' + b.size + ') rotate(' + rot + 'rad)';
-        el.style.opacity = b.size > 0.7 ? '1' : '0.45';
+          'translate(' + b.x + 'px,' + b.y + 'px) scale(' + b.size + ') rotate(' + rot + 'rad)';
+        el.style.opacity = b.size > 0.5 ? (0.85 + flap * 0.15) : (0.6 + flap * 0.25);
 
         const wl = el.querySelector('.reg-bat__wing-l');
         const wr = el.querySelector('.reg-bat__wing-r');
-        if (wl) wl.style.transform = 'scaleY(' + (1 - flap * 0.45) + ')';
-        if (wr) wr.style.transform = 'scaleY(' + (1 - flap * 0.45) + ')';
+        if (wl) wl.style.transform = 'scaleY(' + (1 - flap * 0.5) + ')';
+        if (wr) wr.style.transform = 'scaleY(' + (1 - flap * 0.5) + ')';
       }
 
       rafRef.current = requestAnimationFrame(frame);
@@ -119,7 +125,7 @@ export default function FlyingBats({ className }) {
         overflow: 'hidden',
         pointerEvents: 'none',
         contain: 'strict',
-        zIndex: 2,
+        zIndex: 1,
       }}
       aria-hidden="true"
     />

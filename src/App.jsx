@@ -2,12 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { gsap } from 'gsap';
 import { Howl, Howler } from 'howler';
-import { useNavigate } from 'react-router-dom';
 import GraveyardScene from './scene/GraveyardScene.jsx';
 import { stormSettings } from './scene/lightning.js';
 import { introSmoke, mountIntroSmoke, unmountIntroSmoke } from './scene/introSmoke.js';
 import { warmIntroSmokeAssets } from './scene/IntroSmoke.jsx';
 import RegistrationSmoke from './components/RegistrationSmoke.jsx';
+import RegistrationPageInner from './components/RegistrationPage.jsx';
 
 /* The edited 4.2 s swoosh. Served from /public, never from a CDN, and always
    started from zero on the click. If the file is absent the entrance still
@@ -44,7 +44,6 @@ function prefersReduced(){
 }
 
 export default function App(){
-  const navigate = useNavigate();
   const [webgl]=useState(supportsWebGL);
   const [soundOn,setSoundOn]=useState(false);
   const [flashesOn,setFlashesOn]=useState(true);
@@ -53,6 +52,7 @@ export default function App(){
   const [scrollProgress,setScrollProgress]=useState(0);
   const [showRegister,setShowRegister]=useState(false);
   const [batsFlying,setBatsFlying]=useState(false);
+  const [showRegistration,setShowRegistration]=useState(false);
 
   const entering=introState!==PHASE.IDLE&&introState!==PHASE.COMPLETE;
   const entered=introState===PHASE.COMPLETE;
@@ -222,6 +222,9 @@ export default function App(){
        and never depends on the audio succeeding. */
     stopBackgroundAudio();
     playIntroAudio();
+    window.setTimeout(() => {
+      setShowRegister(true);
+    }, 6000);
 
     /* The sting plays in real time, so the sequence must be wall-clock. That
        is GSAP's default (lag smoothing clamps only frames longer than 500 ms,
@@ -408,13 +411,10 @@ export default function App(){
   },[enter]);
 
   useEffect(()=>{
-    if(introState === PHASE.LOGO || entered){
-      const t = setTimeout(()=>setShowRegister(true), 2000);
-      return ()=>clearTimeout(t);
-    }else{
+    if(introState === PHASE.IDLE){
       setShowRegister(false);
     }
-  },[introState, entered]);
+  },[introState]);
 
   const handleRegisterClick = useCallback((e)=>{
     e.preventDefault();
@@ -422,14 +422,9 @@ export default function App(){
     if(batsFlying) return;
     setBatsFlying(true);
     setTimeout(()=>{
-      try {
-        navigate('/register');
-      } catch (err) {
-        console.error('Navigation failed:', err);
-        window.location.href = '/register';
-      }
-    }, 500);
-  },[batsFlying, navigate]);
+      setShowRegistration(true);
+    }, 100);
+  },[batsFlying]);
 
   /* Scroll owns the hero/footer opacity only *before* the entrance starts.
      From the first click GSAP owns them, so React must stop writing those
@@ -484,7 +479,7 @@ export default function App(){
         {showRegister && (
           <div className="logo-intro__register-wrap" style={{position:'relative',marginTop:'18px',animation:'registerFadeIn 0.5s ease-out'}}>
             <RegistrationSmoke className="logo-intro__smoke logo-intro__smoke--button" />
-            <button onClick={(e)=>{ e.preventDefault(); e.stopPropagation(); if(batsFlying) return; setBatsFlying(true); setTimeout(()=>{ try{ window.location.href = '/register'; }catch(err){ try{ navigate('/register'); }catch(e2){ window.location.assign('/register'); } } }, 400); }} className="register-cta" disabled={batsFlying} type="button">
+            <button onClick={(e)=>{ e.preventDefault(); e.stopPropagation(); if(batsFlying) return; setBatsFlying(true); setTimeout(()=>{ setShowRegistration(true); }, 400); }} className="register-cta" disabled={batsFlying} type="button">
               <span className="register-cta__line">REGISTER</span>
               <span className="register-cta__accent" aria-hidden="true" />
             </button>
@@ -509,6 +504,11 @@ export default function App(){
       </nav>
     </section>
 
+    {showRegistration && (
+      <div style={{position:'fixed',inset:0,zIndex:1000,overflowY:'auto',overflowX:'hidden'}}>
+        <RegistrationPageInner onBack={()=>setShowRegistration(false)} />
+      </div>
+    )}
     {!ready&&<div className="loading">THE GRAVEYARD IS WAKING…</div>}
     <span className="sr" role="status">{entering?'Entering MAFIAS':entered?'Welcome to MAFIAS':''}</span>
   </main>;
