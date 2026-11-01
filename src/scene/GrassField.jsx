@@ -21,9 +21,9 @@ import { groundSurface, makeRng } from './procgen.js';
  *   • roots are placed on the project's own groundSurface() height function
  * ------------------------------------------------------------------ */
 
-const BLADE_W = 0.055;
-const BLADE_H = 0.38;
-const JOINTS = 5;
+const BLADE_W = 0.028;
+const BLADE_H = 0.16;
+const JOINTS = 4;
 
 const texLoader = new THREE.TextureLoader();
 
@@ -231,9 +231,9 @@ export default function GrassField({ patches = [], exclude = null, count = 12000
       alphaMap: tex.alpha,
       alphaTest: 0.42,          // cutout, never blending: no alpha overdraw
       side: THREE.DoubleSide,
-      roughness: 0.94,
+      roughness: 0.98,
       metalness: 0,
-      color: new THREE.Color('#9aa277'),  // pale, dry olive under moonlight
+      color: new THREE.Color('#7a6747'),  // dry brown grass
       dithering: true
     });
     m.onBeforeCompile = (shader) => {
@@ -300,14 +300,11 @@ ${SIMPLEX_GLSL}
         .replace('#include <common>', `#include <common>
           uniform float uBladeHeightF;`)
         .replace('#include <map_fragment>', `#include <map_fragment>
-          /* the reference texture is lawn-green; pull it toward dry straw so
-             the blades belong to a dead gothic graveyard */
+          /* pull toward dry brown straw for thin dead grass */
           float lum = dot(diffuseColor.rgb, vec3(0.299, 0.587, 0.114));
-          vec3 straw = vec3(1.28, 1.02, 0.56) * lum;
-          diffuseColor.rgb = mix(diffuseColor.rgb, straw, 0.72);
-          /* root shadow: darken toward the base of the blade (the reference
-             mixed a bottom colour in; this keeps it inside the lit pipeline) */
-          diffuseColor.rgb *= mix(0.58, 1.06, smoothstep(0.0, 0.75, vMapUv.y));`);
+          vec3 straw = vec3(0.95, 0.78, 0.48) * lum;
+          diffuseColor.rgb = mix(diffuseColor.rgb, straw, 0.9);
+          diffuseColor.rgb *= mix(0.5, 0.9, smoothstep(0.0, 0.8, vMapUv.y));`);
 
       registerWindShader(shader);
       m.userData.windShader = shader;   // dev/inspection hook

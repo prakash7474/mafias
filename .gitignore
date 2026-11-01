@@ -1,9 +1,93 @@
-node_modules
+# ============================================================
+# MAFIAS — React + Vite + Three.js / React Three Fiber
+# ============================================================
+
+# Dependencies
+node_modules/
+
+# Vite / production build output
 dist/
-audit-tmp/
+dist-ssr/
+build/
+
+# Local development caches
+.vite/
+.vite-temp/
+.cache/
+.parcel-cache/
+.turbo/
+.eslintcache
+.stylelintcache
+
+# Logs
 *.log
-*.map
-.DS_Store
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Environment files / secrets
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+
+# Local-only files
+*.local
+*.tmp
+*.temp
+*.bak
+*.swp
+*.swo
+*~
+
+# Test / coverage output
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# TypeScript build metadata
+*.tsbuildinfo
+
+# Deployment metadata
+.vercel/
+.netlify/
+
+# Temporary audit output
+/audit-tmp/
+
+# Freebuff local workspace state (keep shared skills in .agents/skills)
+/.freebuff/
+
+# Operating system files
+.DS_Store
+.AppleDouble
+.LSOverride
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# IDE / editor local state
+.idea/
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+
+# Optional generated asset intermediates
+*.blend1
+*.blend2
+*.fbx~
+*.glb.tmp
+*.gltf.tmp
+
+# Keep application assets and project skills tracked:
+# public/        — runtime images, audio, models and other assets
+# src/           — application source
+.agents
+.claude
+# Do not add these directories to .gitignore.

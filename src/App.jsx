@@ -7,7 +7,7 @@ import { stormSettings } from './scene/lightning.js';
 import { introSmoke, mountIntroSmoke, unmountIntroSmoke } from './scene/introSmoke.js';
 import { warmIntroSmokeAssets } from './scene/IntroSmoke.jsx';
 import RegistrationSmoke from './components/RegistrationSmoke.jsx';
-import RegistrationPageInner from './components/RegistrationPage.jsx';
+import RegistrationMultiStage from './components/RegistrationMultiStage.jsx';
 
 /* The edited 4.2 s swoosh. Served from /public, never from a CDN, and always
    started from zero on the click. If the file is absent the entrance still
@@ -163,15 +163,22 @@ export default function App(){
   /* The toggles are locked only while the sequence itself is running. After
      it, the visitor can explicitly bring sound back (the intro leaves every
      voice silent, it does not break the control). */
-  const toggleSound=useCallback(()=>{
-    if(entering)return;
-    const next=!soundOn;setSoundOn(next);
+  /* One SOUND state for the whole site: the registration journey reads the
+     same flag, so its transitions are silent until the visitor asks for
+     audio here or in the registration header. */
+  const setSoundState=useCallback((next)=>{
+    setSoundOn(next);
     stormSettings.sound=next;
     if(next){
       stormSettings.paused=false;
       if(drone.current&&!drone.current.playing())drone.current.play();
     }else drone.current?.stop();
-  },[soundOn,entering]);
+  },[]);
+
+  const toggleSound=useCallback(()=>{
+    if(entering)return;
+    setSoundState(!soundOn);
+  },[soundOn,entering,setSoundState]);
 
   // lightning can be switched off on its own, independently of sound
   const toggleFlashes=useCallback(()=>{
@@ -401,14 +408,7 @@ export default function App(){
     if(import.meta.env.DEV)delete window.__MAFIAS_TL__;
   },[]);
 
-  /* Reaching the orb starts the same sequence as the button: the scene
-     dispatches once when the scroll carries the camera all the way in, and
-     the `started` latch inside `enter` makes a double-fire impossible. */
-  useEffect(()=>{
-    const auto=()=>enter();
-    window.addEventListener('mafias:enter-auto',auto);
-    return ()=>window.removeEventListener('mafias:enter-auto',auto);
-  },[enter]);
+  /* Auto-trigger removed - triggered at slide 5 */
 
   useEffect(()=>{
     if(introState === PHASE.IDLE){
@@ -431,6 +431,7 @@ export default function App(){
      inline styles — a phase-change re-render used to snap the footer (and
      the hero wrapper) back to opacity 1 in the middle of the fade-out. */
   const idleFade=introState===PHASE.IDLE?Math.max(0,1-scrollProgress/.06):0;
+  const slide5Triggered = useRef(false);
   useEffect(()=>{if(!webgl)setReady(true);},[webgl]);
   useEffect(()=>{
     const update=()=>{
@@ -438,10 +439,14 @@ export default function App(){
       const progress=Math.min(1,Math.max(0,window.scrollY/max));
       setScrollProgress(progress);
       window.dispatchEvent(new CustomEvent('mafias:scroll',{detail:{progress}}));
+      if(introState===PHASE.IDLE && !slide5Triggered.current && progress >= 0.85){
+        slide5Triggered.current = true;
+        enter();
+      }
     };
     window.addEventListener('scroll',update,{passive:true}); update();
     return ()=>window.removeEventListener('scroll',update);
-  },[]);
+  },[enter,introState]);
 
   return <main className="experience">
     {webgl
@@ -453,8 +458,11 @@ export default function App(){
     {!entered&&<section className="hero" id="home" style={introState===PHASE.IDLE?{opacity:idleFade,pointerEvents:idleFade<.05?'none':'auto'}:{pointerEvents:'none'}}><p className="eyebrow"><span/> CEG'S UNOFFICIAL VARIETY TEAM <span/></p><h1>PERFORM.<br/><em>CREATE. ENTERTAIN.</em></h1><p className="copy">We entertain, create and inspire —<br/>right here at CEG, Guindy.</p><button ref={enterBtn} className="enter" onClick={enter} disabled={entering}>{entering?'CROSSING OVER…':'ENTER MAFIAS'} <b>↗</b></button><p className="hint">TURN SOUND ON FOR THE FULL EXPERIENCE</p></section>}
     <footer style={{opacity:idleFade,pointerEvents:idleFade<.05?'none':'auto'}}><span>MAFIAS • CEG</span><span>SCROLL TO DESCEND ↓</span></footer>
     <div className="scroll-story" aria-hidden="true">
-      <section className="story-panel story-two"><span className="story-index">02 / ON THE STAGE</span><h2>THE NIGHT<br/><em>IS A SHOW.</em></h2><p>Bringing campus moments to life.</p></section>
-      <section className="story-panel story-three"><span className="story-index">03 / THE CIRCLE</span><h2>TALENT MEETS<br/><em>ENTERTAINMENT.</em></h2><p>Making memories, one performance at a time.</p></section>
+      <section className="story-panel story-one"><span className="story-index">01 / 05</span><h2>A NAME. AN IDENTITY.<br/><em>A LEGACY.</em></h2><p>MAFIAS — CEG Guindy's creative collective.</p></section>
+      <section className="story-panel story-two"><span className="story-index">02 / 05</span><h2>EVERY LEGACY<br/><em>HAS A BEGINNING.</em></h2><p>More than a decade of culture, creativity and community.</p></section>
+      <section className="story-panel story-three"><span className="story-index">03 / 05</span><h2>ONE VISION.<br/><em>COUNTLESS POSSIBILITIES.</em></h2><p>NARENDRA PRASATH (NP)<br/>FOUNDER OF MAFIAS</p></section>
+      <section className="story-panel story-four"><span className="story-index">04 / 05</span><h2>MANY MINDS.<br/><em>ONE COMMUNITY.</em></h2><p>The people who shape MAFIAS<br/>through creativity and collaboration.</p></section>
+      <section className="story-panel story-five"><span className="story-index">05 / 05</span><h2>THE STORY IS STILL<br/><em>BEING WRITTEN.</em></h2><p>Every generation leaves its mark.<br/>The next chapter begins with you.</p></section>
     </div>
 
     {/* Transition layers. Always mounted so the timeline can address them,
@@ -463,8 +471,7 @@ export default function App(){
     <section ref={welcomeRef} className="welcome-intro"
       data-show={introState===PHASE.WELCOME||introState===PHASE.LOGO?'true':'false'}
       aria-hidden={introState!==PHASE.WELCOME}>
-      <h2>{WELCOME.split('').map((char,i)=>
-        <span key={i} className="welcome-letter">{char===' '?'\u00a0':char}</span>)}</h2>
+      <h2 className="welcome-two-line"><span>WELCOME TO</span><span>MAFIAS</span></h2>
     </section>
     <section className="logo-intro" ref={logoLayerRef}
       data-show={introState===PHASE.LOGO||entered?'true':'false'}
@@ -506,7 +513,11 @@ export default function App(){
 
     {showRegistration && (
       <div style={{position:'fixed',inset:0,zIndex:1000,overflowY:'auto',overflowX:'hidden'}}>
-        <RegistrationPageInner onBack={()=>setShowRegistration(false)} />
+        <RegistrationMultiStage
+          onBack={()=>setShowRegistration(false)}
+          soundOn={soundOn}
+          onSoundToggle={setSoundState}
+        />
       </div>
     )}
     {!ready&&<div className="loading">THE GRAVEYARD IS WAKING…</div>}

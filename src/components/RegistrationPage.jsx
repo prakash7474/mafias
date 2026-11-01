@@ -1,5 +1,5 @@
 import { useRef, useEffect, useState, useCallback, useMemo } from 'react';
-import FlyingBats from './effects/FlyingBats.jsx';
+import RegistrationBats from './effects/RegistrationBats.jsx';
 import RegistrationSmoke from './RegistrationSmoke.jsx';
 import RegistrationForm from './RegistrationForm.jsx';
 import CharacterPreview from './CharacterPreview.jsx';
@@ -81,9 +81,7 @@ export default function RegistrationPageInner({ onBack } = {}) {
           : { opacity: 0 }
       }
     >
-      <FlyingBats className="registration-bats" />
-      <FlyingBats className="registration-bats registration-bats--alt" />
-      <FlyingBats className="registration-bats" style={{zIndex:1}} />
+      <RegistrationBats />
       <RegistrationSmoke
         className={
           (reduced || compact) ? 'registration-smoke reg-smoke-compact' : 'registration-smoke'

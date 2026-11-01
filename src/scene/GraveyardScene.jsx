@@ -13,7 +13,6 @@ import {
 import { stormState } from './lightning.js';
 import { WIND, applyWindBend, clearBendShaders, updateWind } from './wind.js';
 import GrassField from './GrassField.jsx';
-import Ghosts from './Ghosts.jsx';
 import Storm from './Storm.jsx';
 import CloudSky from './CloudSky.jsx';
 import SkullStatue from '../components/SkullStatue.jsx';
@@ -35,8 +34,8 @@ function getQuality(){
   /* Quality preset: fewer lights/shadows/particles and a smaller key shadow
      map on phones, full treatment on desktop. */
   return MOBILE
-    ?{shadow:1024,spotShadows:false,spots:2,graveRows:16,backGraves:6,trees:10,blades:2800,rocks:60,sparks:25,groundSeg:48,redAccent:false,grass:false,wind:false}
-    :{shadow:2048,spotShadows:true,spots:3,graveRows:26,backGraves:14,trees:17,blades:12000,rocks:150,sparks:70,groundSeg:96,redAccent:true,grass:true,wind:true};
+    ?{shadow:1024,spotShadows:false,spots:2,graveRows:16,backGraves:6,trees:10,blades:3500,rocks:60,sparks:25,groundSeg:48,redAccent:false,grass:true,wind:false}
+    :{shadow:2048,spotShadows:true,spots:3,graveRows:26,backGraves:14,trees:17,blades:16000,rocks:150,sparks:70,groundSeg:96,redAccent:true,grass:true,wind:true};
 }
 
 // Scroll-driven camera path: z = CAM_START + CAM_TRAVEL * progress (travel is negative).
@@ -543,35 +542,35 @@ function GraveyardScene(){
     const patches=[],blocks=[];
     // tufts hugging every tree base
     treeDefs.forEach(d=>{
-      patches.push({x:d.x,z:d.z,r:1.5+1.1*d.s,w:2.4,s:1.05});
+      patches.push({x:d.x,z:d.z,r:2.2+1.4*d.s,w:3.2,s:1.0});
       blocks.push({x:d.x,z:d.z,r:.62*d.s+.34});
     });
     // between the tombstones
     graveGroups.flat().forEach(g=>{
       blocks.push({x:g.x,z:g.z,r:.4+.42*(g.s??1)});
-      if(rng()<.85)patches.push({x:g.x+(rng()-.5)*1.7,z:g.z+(rng()-.5)*1.7,r:1.35,w:1.5,s:.85+rng()*.45});
+      if(rng()<.95)patches.push({x:g.x+(rng()-.5)*2.2,z:g.z+(rng()-.5)*2.2,r:1.8,w:2.0,s:.9+rng()*.5});
     });
     // bare mounds: nothing grows through a fresh grave
     moundData.forEach(m=>blocks.push({x:m.x,z:m.z,r:.62}));
-    // broad, low-density blankets over the cemetery floor (still masked per stone)
-    for(let i=0;i<14;i++){
+    // broad blankets over the cemetery floor
+    for(let i=0;i<24;i++){
       const side=i%2?-1:1;
-      patches.push({x:side*(2.9+rng()*5.5),z:7-rng()*20,r:2.6+rng()*1.8,w:1.1,s:.8+rng()*.5});
+      patches.push({x:side*(2.4+rng()*6.8),z:7-rng()*24,r:3.8+rng()*2.6,w:1.9,s:.9+rng()*.6});
     }
     // graveyard edges
-    for(let i=0;i<12;i++){
+    for(let i=0;i<20;i++){
       const side=i%2?-1:1;
-      patches.push({x:side*(7+rng()*5.5),z:8-rng()*25,r:2.2+rng()*2.2,w:1.5,s:.85+rng()*.5});
+      patches.push({x:side*(6+rng()*7),z:8-rng()*30,r:3.2+rng()*3.0,w:2.1,s:.9+rng()*.6});
     }
     // near broken stonework and loose rocks
-    rockData.forEach((r,i)=>{if(i%4===0)patches.push({x:r.x,z:r.z,r:.85,w:.7,s:.8});});
-    // sparse tufts along the path margins
-    for(let i=0;i<10;i++){
+    rockData.forEach((r,i)=>{if(i%3===0)patches.push({x:r.x,z:r.z,r:1.6,w:1.3,s:.9});});
+    // tufts along the path margins
+    for(let i=0;i<18;i++){
       const side=i%2?-1:1;
-      patches.push({x:side*(2+rng()*.9),z:9-rng()*20,r:1.2,w:.7,s:.7+rng()*.3});
+      patches.push({x:side*(1.8+rng()*1.6),z:9-rng()*24,r:2.0,w:1.1,s:.8+rng()*.4});
     }
     // back field
-    for(let i=0;i<6;i++)patches.push({x:(rng()-.5)*22,z:-13-rng()*6,r:2.6+rng()*2,w:1.3,s:.9+rng()*.4});
+    for(let i=0;i<14;i++)patches.push({x:(rng()-.5)*28,z:-11-rng()*10,r:3.8+rng()*2.8,w:1.9,s:1.0+rng()*.5});
 
     const exclude=(x,z)=>{
       if(Math.abs(x)<1.75)return true;                 // whole width of the path
@@ -729,12 +728,7 @@ function GraveyardScene(){
       /* the orb reads hotter as the visitor closes in; Phase C still owns
          emissiveIntensity, so only the fill light is driven here */
       if(portalLightA.current)portalLightA.current.intensity=30+a*34;
-      /* Story 02 and 03 have been read by the time the scroll bottom is
-         reached: only then does the camera dive into the red orb. */
-      if(!reached.current && (p>=APPROACH_DONE || pTarget>=APPROACH_DONE)){
-        reached.current=true;
-        window.dispatchEvent(new CustomEvent('mafias:enter-auto'));
-      }
+      /* Auto-trigger removed - will be triggered from App.jsx at slide 5 */
       return;
     }
 
@@ -769,7 +763,6 @@ function GraveyardScene(){
       <Instances key={`g${i}`} geometry={A.graveGeos[i]} material={A.mats.stone} data={data} castShadow receiveShadow colors/>)}
     <Instances geometry={A.moundGeo} material={A.mats.soil} data={moundData} receiveShadow colors/>
 
-    <Ghosts treeGeos={A.treeGeos} treeDefs={treeDefs}/>
     <Moon soft={A.softTex} moonTex={A.moonTex}/>
     <Haze soft={A.softTex}/>
     <Portal refObj={portal} lightA={portalLightA} lightB={portalLightB} materialRef={portalMaterial}/>

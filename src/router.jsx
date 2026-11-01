@@ -2,7 +2,7 @@ import { createBrowserRouter } from 'react-router-dom';
 import { lazy, Suspense } from 'react';
 import App from './App.jsx';
 
-const RegistrationPage = lazy(() => import('./components/RegistrationPage.jsx'));
+const RegistrationPage = lazy(() => import('./components/RegistrationMultiStage.jsx'));
 
 const router = createBrowserRouter([
   {
