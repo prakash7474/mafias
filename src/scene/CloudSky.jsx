@@ -5,6 +5,8 @@ import { Atmosphere } from '@takram/three-atmosphere/r3f';
 import { Clouds } from '@takram/three-clouds/r3f';
 import * as THREE from 'three';
 import { stormState } from './lightning.js';
+import { deviceProfile } from '../lib/deviceProfile.js';
+import { liveQuality } from '../lib/adaptiveQuality.js';
 
 /* ------------------------------------------------------------------ *
  * CloudSky — volumetric storm clouds (@takram/three-clouds) wired into
@@ -35,10 +37,8 @@ import { stormState } from './lightning.js';
  * simulated lightning source inside the cloud volume.
  * ------------------------------------------------------------------ */
 
-const isSmall = () => typeof window !== 'undefined' && window.innerWidth < 700;
-const MOBILE = isSmall();
-// Ensure minimal multisampling for postprocessing to work
-const MIN_MULTISAMPLING = 2; // Always use at least 2x MSAA for EffectComposer
+/* Quality comes from the shared device profile — no second detector. */
+const RENDER = deviceProfile.render;
 
 /* Rest state: clouds lit faintly from the direction of the visible moon.
    Flash state: light swings toward the strike and scales up hard. */
@@ -54,6 +54,18 @@ const dirScratch = new THREE.Vector3();
 const asset = (name) => `${import.meta.env.BASE_URL}clouds/${name}`;
 
 function CloudEffects({ atmoRef, cloudsRef }) {
+  /* The governor lowers the cloud buffer resolution when the device cannot
+     hold its target. The cloud deck itself never disappears.
+     `qualityPreset` is a compound prop that reapplies its own resolution
+     whenever the cloud textures finish loading, so the authored scale is
+     re-asserted on the frame (no-op once they match). */
+  const applyResolution = () => {
+    const effect = cloudsRef.current;
+    if (!effect) return;
+    const want = RENDER.cloudResolution * liveQuality.cloud;
+    if (Math.abs(effect.resolutionScale - want) > 0.001) effect.resolutionScale = want;
+  };
+
   /* Dev-only inspection hook used by the browser audit (production drops it). */
   useEffect(() => {
     if (!import.meta.env.DEV) return;
@@ -64,6 +76,7 @@ function CloudEffects({ atmoRef, cloudsRef }) {
   /* One frame loop: rest lighting → flash response, straight from the
      shared storm clock. No React state, no allocations. */
   useFrame(() => {
+    applyResolution();
     const atmo = atmoRef.current;
     const clouds = cloudsRef.current;
     if (!atmo || !clouds || stormState.paused) return;
@@ -89,11 +102,11 @@ function CloudEffects({ atmoRef, cloudsRef }) {
   });
 
   return (
-    <EffectComposer multisampling={Math.max(MIN_MULTISAMPLING, MOBILE ? 2 : 4)}>
+    <EffectComposer multisampling={RENDER.composerMSAA}>
       <Clouds
         ref={cloudsRef}
-        qualityPreset={MOBILE ? 'low' : 'high'}
-        resolutionScale={MOBILE ? 0.6 : 1}
+        qualityPreset={RENDER.cloudQuality}
+        resolutionScale={RENDER.cloudResolution}
         temporalUpscale={false}
         lightShafts={false}
         skipRendering={false}

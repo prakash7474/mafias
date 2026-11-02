@@ -1,13 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
-import { Canvas } from '@react-three/fiber';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
 import { Howl, Howler } from 'howler';
-import GraveyardScene from './scene/GraveyardScene.jsx';
 import { stormSettings } from './scene/lightning.js';
 import { introSmoke, mountIntroSmoke, unmountIntroSmoke } from './scene/introSmoke.js';
-import { warmIntroSmokeAssets } from './scene/IntroSmoke.jsx';
 import RegistrationSmoke from './components/RegistrationSmoke.jsx';
-import RegistrationMultiStage from './components/RegistrationMultiStage.jsx';
+
+/* The graveyard and the registration journey are separate chunks: the hero,
+   navigation and entrance chrome paint before three.js is parsed, and the
+   registration audio/characters are only fetched when someone registers. */
+const SceneCanvas = lazy(() => import('./scene/SceneCanvas.jsx'));
+const RegistrationMultiStage = lazy(() => import('./components/RegistrationMultiStage.jsx'));
 
 /* The edited 4.2 s swoosh. Served from /public, never from a CDN, and always
    started from zero on the click. If the file is absent the entrance still
@@ -78,12 +80,12 @@ export default function App(){
   /* ---- audio assets (created once, never autoplayed) ---- */
   useEffect(()=>{
     document.body.classList.add('mafias-static');
-    // build the smoke textures while the page is idle so the 0.45 s mount
-    // of the field costs no main-thread time at all
-    warmIntroSmokeAssets();
+    // texture warm-up now happens inside the lazily loaded scene chunk
     drone.current=new Howl({
       src:['/audio/Danny_Elfman_Wednesday_OST_-_Wednesday_Main_Titles_2022_(mp3.pm).mp3','/audio/dark-drone.mp3'],
-      loop:true,volume:.24,html5:true,
+      /* 2.8 MB of ambience must not be part of the first mobile load: it is
+         fetched the first time the visitor turns SOUND on. */
+      loop:true,volume:.24,html5:true,preload:false,
       onloaderror:()=>{console.info('Audio missing: add a background loop at public/audio/dark-drone.mp3');setSoundOn(false);},
       onplayerror:()=>{console.info('Audio playback blocked or unavailable; sound stays off.');setSoundOn(false);}});
     /* html5:true — the sting is a short local MP3 played exactly once from a
@@ -450,7 +452,7 @@ export default function App(){
 
   return <main className="experience">
     {webgl
-      ? <div className="canvas"><Canvas frameloop="always" dpr={[1,1.25]} camera={{position:[0,2.7,12],fov:48}} gl={{antialias:true,alpha:false,powerPreference:'high-performance'}} onCreated={({gl})=>{gl.setClearColor('#07080b',1);setReady(true);}}><GraveyardScene/></Canvas></div>
+      ? <div className="canvas"><Suspense fallback={<div className="canvas fallback" role="img" aria-label="A moonlit graveyard under a dark sky"/>}><SceneCanvas onReady={()=>setReady(true)} onContextLost={()=>setReady(true)}/></Suspense></div>
       : <div className="canvas fallback" role="img" aria-label="A moonlit graveyard under a dark sky"/>}
     <div className="shade"/><div className="grain"/>
     <div className="scroll-progress" style={{transform:`scaleX(${scrollProgress})`}} aria-hidden="true"/>
@@ -513,11 +515,13 @@ export default function App(){
 
     {showRegistration && (
       <div style={{position:'fixed',inset:0,zIndex:1000,overflowY:'auto',overflowX:'hidden'}}>
-        <RegistrationMultiStage
-          onBack={()=>setShowRegistration(false)}
-          soundOn={soundOn}
-          onSoundToggle={setSoundState}
-        />
+        <Suspense fallback={<main className="registration-loading" aria-hidden="true"><span className="registration-spinner" aria-label="Loading registration"/></main>}>
+          <RegistrationMultiStage
+            onBack={()=>setShowRegistration(false)}
+            soundOn={soundOn}
+            onSoundToggle={setSoundState}
+          />
+        </Suspense>
       </div>
     )}
     {!ready&&<div className="loading">THE GRAVEYARD IS WAKING…</div>}

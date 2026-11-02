@@ -7,6 +7,7 @@ import {
 } from './lightning.js';
 import { ThunderPlayer } from './thunder.js';
 import { makeRng, makeSoftTexture } from './procgen.js';
+import { deviceProfile } from '../lib/deviceProfile.js';
 
 /* ------------------------------------------------------------------ *
  * Storm — the thunderstorm system.
@@ -27,7 +28,8 @@ import { makeRng, makeSoftTexture } from './procgen.js';
    mode can scale everything by one number. */
 const PEAK = { dir: 2.6, amb: .55, local: 420, glow: .34 };
 const FLASH_FOG = new THREE.Color('#4c5f86');
-const isSmall = () => typeof window !== 'undefined' && window.innerWidth < 700;
+const RENDER = deviceProfile.render;
+const isSmall = () => deviceProfile.tier === 'mobile';
 
 function prefersReduced(){
   return typeof window !== 'undefined' && window.matchMedia &&
@@ -40,7 +42,7 @@ export default function Storm({ apiRef, soft }){
   const glowRef = useRef();
   const groups = useRef([]);
   const boltRng = useMemo(() => makeRng(77321), []);
-  const boltCount = isSmall() ? 4 : 6;
+  const boltCount = RENDER.stormBolts;
 
   /* Bolt variants are built once and reused for every strike. */
   const bolts = useMemo(() => Array.from({ length: boltCount }, () => buildBolt(boltRng)), [boltCount, boltRng]);
@@ -82,7 +84,7 @@ export default function Storm({ apiRef, soft }){
     enabled: true,
     intensity: 1,
     duration: 1,
-    local: !isSmall() && !reduced,
+    local: RENDER.stormLocal && !reduced,
     cloud: true,
     thunder: true,
     kmOverride: null

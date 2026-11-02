@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef } from 'react';
+import { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { useFrame, useThree } from '@react-three/fiber';
 import { Sparkles, MeshDistortMaterial } from '@react-three/drei';
 import * as THREE from 'three';
@@ -18,25 +18,14 @@ import CloudSky from './CloudSky.jsx';
 import SkullStatue from '../components/SkullStatue.jsx';
 import IntroSmoke from './IntroSmoke.jsx';
 import { introSmoke } from './introSmoke.js';
+import { deviceProfile } from '../lib/deviceProfile.js';
+import { liveQuality, createPerformanceMonitor } from '../lib/adaptiveQuality.js';
 
-const isSmall=()=>{
-  if(typeof window==='undefined') return false;
-  const ua = (navigator.userAgent || '').toLowerCase();
-  const isMobileUA = /android|webos|iphone|ipad|ipod|blackberry|iemobile|opera mini|mobile/i.test(ua);
-  const isTouch = ('ontouchstart' in window) || (navigator.maxTouchPoints > 0);
-  const isSmallScreen = window.innerWidth < 1024;
-  return isMobileUA || (isTouch && isSmallScreen) || window.innerWidth < 820;
-};
-const prefersReduced=()=>typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-function getQuality(){
-  const MOBILE=isSmall();
-  /* Quality preset: fewer lights/shadows/particles and a smaller key shadow
-     map on phones, full treatment on desktop. */
-  return MOBILE
-    ?{shadow:1024,spotShadows:false,spots:2,graveRows:16,backGraves:6,trees:10,blades:3500,rocks:60,sparks:25,groundSeg:48,redAccent:false,grass:true,wind:false}
-    :{shadow:2048,spotShadows:true,spots:3,graveRows:26,backGraves:14,trees:17,blades:16000,rocks:150,sparks:70,groundSeg:96,redAccent:true,grass:true,wind:true};
-}
+/* One shared vocabulary for the whole scene. No module builds its own
+   device test any more: mobile, tablet and desktop all read this object.
+   The desktop values are unchanged from the original cinematic build. */
+const QUALITY = deviceProfile.render;
+const PREFERS_REDUCED=()=>typeof window!=='undefined'&&window.matchMedia&&window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
 // Scroll-driven camera path: z = CAM_START + CAM_TRAVEL * progress (travel is negative).
 const CAM_START=12, CAM_TRAVEL=-18, LOOK_Y0=1.4, LOOK_Y1=.7, LOOK_Z0=-4, LOOK_Z1=-6;
@@ -110,7 +99,7 @@ function Spot({pos,target,angle,penumbra,intensity,distance,color,castShadow,map
 }
 
 function SceneLights(){
-  const Q = useMemo(()=>getQuality(),[]);
+  const Q = QUALITY;
   const keyRef=useRef();
   // make sure the shadow frustum really covers the graveyard
   useEffect(()=>{
@@ -121,12 +110,12 @@ function SceneLights(){
     c.updateProjectionMatrix();
     l.shadow.bias=-.0004;
     l.shadow.normalBias=.035;
-    if(l.shadow.mapSize.x!==Q.shadow){
-      l.shadow.mapSize.set(Q.shadow,Q.shadow);
+    if(l.shadow.mapSize.x!==Q.shadowMap){
+      l.shadow.mapSize.set(Q.shadowMap,Q.shadowMap);
       l.shadow.map?.dispose();
       l.shadow.map=null;
     }
-  },[Q.shadow]);
+  },[Q.shadowMap]);
   return <>
     {/* B. controlled ambient — reveals shape without flattening */}
     <ambientLight intensity={.06} color="#4a5575"/>
@@ -137,7 +126,7 @@ function SceneLights(){
       ref={keyRef}
       position={[-16,24,10]} intensity={3.2} color="#c9d8ff"
       castShadow
-      shadow-mapSize-width={Q.shadow} shadow-mapSize-height={Q.shadow}
+      shadow-mapSize-width={Q.shadowMap} shadow-mapSize-height={Q.shadowMap}
       shadow-camera-left={-24} shadow-camera-right={24}
       shadow-camera-top={24} shadow-camera-bottom={-24}
       shadow-camera-near={1} shadow-camera-far={90}
@@ -296,10 +285,10 @@ function Bat({start,scale=1,speed=1,phase=0}){
 
 function Smoke(){
   const group=useRef();
-  const mobile = typeof window!=='undefined' && (isSmall());
+  const clockAcc=useRef(0);
   const items=useMemo(()=>{
     const arr=[];
-    const count = mobile?36:90;
+    const count = QUALITY.smokePuffs;
     for(let i=0;i<count;i++){
       const t = i/count;
       // concentrate heavily along the pathway (centered near x=0)
@@ -316,7 +305,7 @@ function Smoke(){
       });
     }
     return arr;
-  },[mobile]);
+  },[]);
   const texture=useMemo(()=>{
     try{
       const canvas=document.createElement('canvas');canvas.width=256;canvas.height=256;
@@ -342,6 +331,14 @@ function Smoke(){
   useFrame(({clock,camera},delta)=>{
     if(typeof window!=='undefined'&&window.__MAFIAS_STATIC__!==false)return;
     if(!group.current)return;const t=clock.elapsedTime;
+    /* Ambient smoke keeps drifting on every device; on a phone the update
+       runs at a capped cadence (the sprites keep their authored positions)
+       so the CPU cost is bounded without removing a single wisp. */
+    if(QUALITY.smokeUpdateHz>0){
+      clockAcc.current+=delta;
+      if(clockAcc.current<1/QUALITY.smokeUpdateHz)return;
+      clockAcc.current=0;
+    }
     group.current.children.forEach((sprite,i)=>{
       const d=items[i];if(!d)return;
       const cycle=(t*d.speed+d.phase)%3.2,u=cycle/3.2;
@@ -358,14 +355,26 @@ function Smoke(){
   return <group ref={group}>{items.map((d,i)=><sprite key={i} position={[d.x,d.y,d.z]} scale={[d.size*2.0,d.size*1.2,d.size]}><spriteMaterial map={texture} color="#e41a36" transparent opacity={d.opacity} depthWrite={false} blending={THREE.AdditiveBlending} fog={true}/></sprite>)}</group>;
 }
 
-function Portal({refObj,lightA,lightB,materialRef}){return <group ref={refObj} name="mafias-portal" position={[0,2.2,PORTAL_Z0]}>
-  <mesh><icosahedronGeometry args={[1.08,5]}/><MeshDistortMaterial ref={materialRef} color="#18060b" emissive="#520817" emissiveIntensity={1.45} metalness={.62} roughness={.5} distort={0} speed={0}/></mesh>
-  <mesh scale={1.22}><icosahedronGeometry args={[1.08,2]}/><meshBasicMaterial color="#bd263d" wireframe transparent opacity={.14}/></mesh>
-  <mesh rotation={[.4,.2,.1]}><torusGeometry args={[1.42,.012,8,100]}/><meshBasicMaterial color="#a81c32" transparent opacity={.6}/></mesh>
+/* The portal keeps its rings, its red energy, its centre light and its
+   activation animation on every tier. Phones use a coarser icosphere and
+   the standard emissive material instead of the distortion shader — the
+   silhouette, colour and pulse are identical, the shader is far cheaper. */
+function Portal({refObj,lightA,lightB,materialRef}){
+  const R=QUALITY;
+  return <group ref={refObj} name="mafias-portal" position={[0,2.2,PORTAL_Z0]}>
+  <mesh>
+    <icosahedronGeometry args={[1.08,R.portalDetail]}/>
+    {R.portalDistort
+      ?<MeshDistortMaterial ref={materialRef} color="#18060b" emissive="#520817" emissiveIntensity={1.45} metalness={.62} roughness={.5} distort={0} speed={0}/>
+      :<meshStandardMaterial ref={materialRef} color="#18060b" emissive="#520817" emissiveIntensity={1.45} metalness={.62} roughness={.5}/>}
+  </mesh>
+  <mesh scale={1.22}><icosahedronGeometry args={[1.08,R.portalWireframeDetail]}/><meshBasicMaterial color="#bd263d" wireframe transparent opacity={.14}/></mesh>
+  <mesh rotation={[.4,.2,.1]}><torusGeometry args={[1.42,.012,8,R.portalTorusSegments]}/><meshBasicMaterial color="#a81c32" transparent opacity={.6}/></mesh>
   {/* E. portal illumination: emissive surfaces + supplementary fill light */}
   <pointLight ref={lightA} color="#ff2742" intensity={30} distance={18} decay={2}/>
   <pointLight ref={lightB} position={[0,-1.75,.7]} color="#c11631" intensity={13} distance={12} decay={2}/>
-</group>}
+</group>;
+}
 
 function GraveyardScene(){
   const {camera,scene,gl}=useThree();
@@ -374,8 +383,11 @@ function GraveyardScene(){
   const scrollTarget=useRef(0),scrollCurrent=useRef(0),postEnter=useRef(false),enterZ=useRef(0),diving=useRef(false),reduced=useRef(false),started=useRef(false),reached=useRef(false);
   const portalLightA=useRef(null),portalLightB=useRef(null),portalMaterial=useRef(null);
   const stormApi=useRef(null);
-  const Q = useMemo(()=>getQuality(),[]);
-  const MOBILE = useMemo(()=>isSmall(),[]);
+  const Q = QUALITY;
+  const MOBILE = deviceProfile.tier==='mobile';
+  const perf = useMemo(()=>createPerformanceMonitor(deviceProfile),[]);
+  const [cloudsReady,setCloudsReady]=useState(Q.cloudDelay===0);
+  const windAcc=useRef(0);
 
   /* ---- shared assets: built once per quality preset, disposed on unmount ---- */
   const bendBark=useRef({uniforms:null});
@@ -387,8 +399,12 @@ function GraveyardScene(){
     const rockGeo=makeRockGeometry();
     const groundGeo=buildGroundGeometry(80,Q.groundSeg);
     const pathGeo=buildPathGeometry();
-    const groundTex=makeGroundTextures(1024,7);
-    const pathTex=makePathTexture(256,1024,19);
+    /* texture memory is the other mobile budget: a phone does not need a
+       1024² soil map on a 400 px-wide screen, and the generated mip chain
+       is what makes the first frame stall. */
+    const groundSize=MOBILE?512:deviceProfile.tier==='tablet'?768:1024;
+    const groundTex=makeGroundTextures(groundSize,7);
+    const pathTex=MOBILE?makePathTexture(128,512,19):makePathTexture(256,1024,19);
     const softTex=makeSoftTexture();
     const moonTex=makeMoonTexture();
     const barkTex=makeBarkTexture();
@@ -514,7 +530,7 @@ function GraveyardScene(){
     }
     byV[3].push(...fallen);
     // bare mounds — empty graves with no surviving stone
-    for(let i=0;i<(MOBILE?6:11);i++){
+    for(let i=0;i<Q.graveMounds;i++){
       const x=(rng()-.5)*13,z=4-rng()*17;
       if(Math.abs(x)<2.3||nearTree(x,z))continue;
       mounds.push({x,y:groundBase(x,z)-.13,z,ry:(rng()-.5)*.6,s:[.8+rng()*.7,.7+rng()*.4,1+rng()*.7]});
@@ -592,13 +608,49 @@ function GraveyardScene(){
     return Object.entries(byV).map(([v,data])=>({geometry:A.treeGeos[+v],data}));
   },[treeDefs,A]);
 
-  const bats=useMemo(()=>Array.from({length:(isSmall())?6:16},()=>({
+  const bats=useMemo(()=>Array.from({length:Q.bats},()=>({
     start:[(Math.random()-.5)*13,3.2+Math.random()*4,-10.5-Math.random()*8],
     scale:.22+Math.random()*.3,speed:.65+Math.random()*.9,phase:Math.random()*6
   })),[]);
 
+  /* Mobile camera framing: a phone screen is tall and narrow, so the
+     horizontal field of view collapses at the authored 48°. The vertical
+     fov widens on portrait aspects, keeping the orb, the path and the
+     flanking trees inside the frame. Desktop (>1.3) is untouched. */
   useEffect(()=>{
-    reduced.current=prefersReduced();
+    const apply=()=>{
+      const aspect=window.innerWidth/Math.max(1,window.innerHeight);
+      const fov=aspect<.62?66:aspect<.8?60:aspect<1.05?54:48;
+      if(Math.abs(camera.fov-fov)>.01){camera.fov=fov;camera.updateProjectionMatrix();}
+    };
+    apply();
+    window.addEventListener('resize',apply,{passive:true});
+    window.addEventListener('orientationchange',apply,{passive:true});
+    return()=>{
+      window.removeEventListener('resize',apply);
+      window.removeEventListener('orientationchange',apply);
+    };
+  },[camera]);
+
+  /* Volumetric clouds are the single most expensive effect in the scene
+     (two 3D textures + a ray marcher). They are still rendered on every
+     tier, but on a phone they mount once the first graveyard frame is on
+     screen and the browser is idle, so they never delay the entrance. */
+  useEffect(()=>{
+    if(cloudsReady)return undefined;
+    let cancelled=false;
+    const mount=()=>{if(!cancelled)setCloudsReady(true);};
+    const timer=setTimeout(()=>{
+      if('requestIdleCallback' in window)window.requestIdleCallback(mount,{timeout:1500});
+      else mount();
+    },Q.cloudDelay);
+    return()=>{cancelled=true;clearTimeout(timer);};
+  },[cloudsReady,Q.cloudDelay]);
+
+  useEffect(()=>()=>perf.stop(),[perf]);
+
+  useEffect(()=>{
+    reduced.current=PREFERS_REDUCED();
     scene.fog=new THREE.FogExp2(FOG_COLOR,FOG_DENSITY);
     /* The graveyard now lives from the first frame: bats, wind, ghosts and
        the drifting smoke are the ambient layer the visitor asked for — only
@@ -689,7 +741,16 @@ function GraveyardScene(){
 
   useFrame(({pointer,clock},delta)=>{
     const t=clock.elapsedTime;
-    if(Q.wind !== false) updateWind(t); // shared time source: bark + grass bend shaders
+    /* runtime governor: stable 2 s samples, hysteresis, resolution only */
+    perf.sample(delta);
+    if(Q.wind){
+      /* shared time source for bark + grass bend. Phones update it at 20 Hz
+         instead of every frame: the trees still move, the CPU cost halves. */
+      if(Q.windHz>0){
+        windAcc.current+=delta;
+        if(windAcc.current>=1/Q.windHz){updateWind(t);windAcc.current=0;}
+      }else updateWind(t);
+    }
     scrollCurrent.current=THREE.MathUtils.damp(scrollCurrent.current,scrollTarget.current,3.2,delta);
     const p=scrollCurrent.current;
     const pTarget = scrollTarget.current;
@@ -755,7 +816,7 @@ function GraveyardScene(){
     <Instances geometry={A.rockGeo} material={A.mats.soil} data={rockData} colors receiveShadow/>
 
     {/* Phase 3–4: instanced grass blades (ZIP shader, shared wind config) */}
-    {Q.grass !== false && <GrassField patches={grassField.patches} exclude={grassField.exclude} count={grassField.count} seed={101}/>}
+    <GrassField patches={grassField.patches} exclude={grassField.exclude} count={grassField.count} seed={101}/>
 
     {/* Phase 2–4: instanced dead trees + graveyard stonework */}
     {treeGroups.map((g,i)=><Instances key={`t${i}`} geometry={g.geometry} material={A.mats.bark} data={g.data} castShadow receiveShadow/>)}
@@ -768,8 +829,9 @@ function GraveyardScene(){
     <Portal refObj={portal} lightA={portalLightA} lightB={portalLightB} materialRef={portalMaterial}/>
     <SkullStatue />
     <Storm apiRef={stormApi} soft={A.softTex}/>
-    {/* volumetric storm clouds: one EffectComposer, driven by stormState */}
-    <CloudSky/>
+    {/* volumetric storm clouds: one EffectComposer, driven by stormState.
+        Mounted after the first graveyard frames on phones/tablets. */}
+    {cloudsReady&&<CloudSky/>}
     <Smoke/>
     {bats.map((b,i)=><Bat key={i} {...b}/>)}
     <Sparkles count={Q.sparks} scale={[15,7,16]} size={1.4} speed={.13} opacity={.24} color="#c32a42" position={[0,1.5,-5]}/>

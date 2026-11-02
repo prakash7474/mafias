@@ -21,8 +21,22 @@ const prefersReduced = () =>
 const isCompact = () =>
   typeof window !== 'undefined' && window.innerWidth < 820;
 
+/* WebP is ~1/12 the transfer of the original PNGs (14 MB → ~1.2 MB for the
+   whole set) and every browser this site targets decodes it. The PNG stays
+   on disk as a fallback for the rare browser that cannot. */
 const SRC = (gender, tag) =>
-  gender && tag ? '/mafias-character-assets/' + gender + '-' + tag + '.png' : null;
+  gender && tag ? '/mafias-character-assets/' + gender + '-' + tag + '.webp' : null;
+const FALLBACK_SRC = (src) => src.replace(/\.webp$/, '.png');
+
+/* One retry per image, never a loop. */
+function makePngFallback() {
+  return (e) => {
+    const img = e.currentTarget;
+    if (!img || img.dataset.fallback === '1') return;
+    img.dataset.fallback = '1';
+    img.src = FALLBACK_SRC(img.currentSrc || img.src);
+  };
+}
 
 /* Letter-by-letter heading. Each glyph is its own span so the stage
    timeline can stagger them, but the letters are grouped into non-breaking
@@ -58,6 +72,7 @@ function CharacterFigure({ gender, tag, alt }) {
   const [shown, setShown] = useState(next);
   const [prev, setPrev] = useState(null);
   const shownRef = useRef(next);
+  const onImgError = makePngFallback();
 
   useEffect(() => {
     if (next) {
@@ -89,9 +104,9 @@ function CharacterFigure({ gender, tag, alt }) {
   return (
     <div className="reg-figure">
       {prev && prev !== shown && (
-        <img key={prev} src={prev} alt="" aria-hidden="true" className="reg-figure__img reg-figure__img--out" draggable={false} />
+        <img key={prev} src={prev} alt="" aria-hidden="true" className="reg-figure__img reg-figure__img--out" draggable={false} onError={onImgError} />
       )}
-      <img key={shown} src={shown} alt={alt} className="reg-figure__img reg-figure__img--in" draggable={false} />
+      <img key={shown} src={shown} alt={alt} className="reg-figure__img reg-figure__img--in" decoding="async" draggable={false} onError={onImgError} />
     </div>
   );
 }

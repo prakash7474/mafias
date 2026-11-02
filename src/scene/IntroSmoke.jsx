@@ -3,6 +3,7 @@ import { useFrame, useThree } from '@react-three/fiber';
 import { Smoke } from 'react-smoke';
 import * as THREE from 'three';
 import { introSmoke, isIntroSmokeMounted, subscribeIntroSmoke } from './introSmoke.js';
+import { deviceProfile } from '../lib/deviceProfile.js';
 
 /* ------------------------------------------------------------------ *
  * IntroSmoke — the click-triggered red smoke, rendered by react-smoke
@@ -24,14 +25,14 @@ import { introSmoke, isIntroSmokeMounted, subscribeIntroSmoke } from './introSmo
  * afterwards, so the idle graveyard pays nothing for it.
  * ------------------------------------------------------------------ */
 
-const MOBILE = typeof window !== 'undefined' && window.innerWidth < 700;
-
 /* Particle budget. Fill rate is the real cost: every puff is a
    camera-facing quad, so N puffs covering A screens each cost N x A
    screens of blending per frame. These numbers land near 10 screens of
    overdraw — enough layers to be opaque, light enough to stay smooth.
-   (Measured: 56 dense puffs halved the frame rate, this does not.) */
-const DENSITY = MOBILE ? 14 : 20;
+   (Measured: 56 dense puffs halved the frame rate, this does not.)
+   The field is only mounted for the entrance, and the count comes from the
+   shared profile, so a phone shows the same red cloud with fewer layers. */
+const DENSITY = deviceProfile.render.introSmokePuffs;
 
 /* World-space size of one puff and the volume it drifts inside, tuned
    against the real camera (fov 48, sitting at z≈8.3 looking down -Z):

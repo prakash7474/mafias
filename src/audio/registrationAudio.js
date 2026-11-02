@@ -33,7 +33,9 @@ function createHowl(key) {
   console.log(`[REG_AUDIO] Creating Howl for ${key}: ${src}`);
   const howl = new Howl({
     src: [src],
-    preload: true,
+    /* Nothing is downloaded until the visitor asks for audio. The whole
+       registration score used to be fetched with the homepage. */
+    preload: false,
     html5: true,
     onload: () => console.log(`[REG_AUDIO] Loaded: ${key}`),
     onloaderror: (id, err) => console.error(`[REG_AUDIO] Load error for ${key}:`, err),
@@ -44,21 +46,51 @@ function createHowl(key) {
   return howl;
 }
 
-// Preload all sounds
-Object.keys(audioFiles).forEach(createHowl);
+/* Which sound the next stage will need, so it is already buffered when the
+   transition starts (keeps audio and animation ending together). */
+const NEXT_SOUNDS = {
+  nameToDetails: ['detailsToCharacter', 'reverseTransition'],
+  detailsToCharacter: ['characterToReview', 'reverseTransition'],
+  characterToReview: ['submission', 'reverseTransition'],
+  reverseTransition: ['gender', 'tagSelect'],
+  portal: ['characterReveal'],
+  gender: ['tagSelect'],
+};
+
+const primed = new Set();
+export function primeRegistrationAudio(keys = []) {
+  for (const key of keys) {
+    if (!audioFiles[key] || primed.has(key)) continue;
+    primed.add(key);
+    const howl = createHowl(key);
+    try { howl?.load(); } catch (e) { /* streaming HTML5 audio degrades to fetch-on-play */ }
+  }
+}
+
+/* resume() can stay pending forever when the browser has no output device or
+   refuses the gesture. Navigation must never wait on audio, so the wait is
+   bounded — a silent journey is acceptable, a frozen button is not. */
+function resumeContext(ctx, ms = 1200) {
+  return Promise.race([
+    ctx.resume(),
+    new Promise((resolve) => setTimeout(resolve, ms)),
+  ]);
+}
 
 export async function enableAudio() {
   try {
     console.log(`[REG_AUDIO] Enabling audio, ctx state:`, Howler.ctx?.state);
     if (Howler.ctx && Howler.ctx.state === "suspended") {
-      await Howler.ctx.resume();
+      await resumeContext(Howler.ctx);
       console.log(`[REG_AUDIO] Resumed ctx, new state:`, Howler.ctx.state);
     }
     if (Howler.ctx && Howler.ctx.state !== "running") {
-      console.error("[REG_AUDIO] AudioContext not running");
+      console.info("[REG_AUDIO] Audio unavailable; the journey continues silently");
       return false;
     }
     enabled = true;
+    // only now, on an explicit visitor gesture, start fetching the score
+    primeRegistrationAudio(['nameToDetails', 'reverseTransition', 'gender', 'tagSelect']);
     console.log("[REG_AUDIO] Audio enabled");
     return true;
   } catch (error) {
@@ -85,6 +117,7 @@ export const registrationAudio = {
     else key = name;
     const howl = createHowl(key);
     if (!howl) return;
+    primeRegistrationAudio(NEXT_SOUNDS[key] || []);
     const id = howl.play();
     howl.volume(0.42, id);
     howl.fade(0, 0.42, 100, id);
@@ -121,6 +154,7 @@ export const registrationAudio = {
     if (!enabled) return;
     const howl = createHowl("portal");
     if (!howl) return;
+    primeRegistrationAudio(NEXT_SOUNDS.portal);
     const id = howl.play();
     howl.volume(0.48, id);
     instances.add(id);
@@ -143,6 +177,7 @@ export const registrationAudio = {
     if (!enabled) return;
     const howl = createHowl("submission");
     if (!howl) return;
+    primeRegistrationAudio(['success', 'smokeImpact', 'batFlutter']);
     const id = howl.play();
     howl.volume(0.48, id);
     instances.add(id);

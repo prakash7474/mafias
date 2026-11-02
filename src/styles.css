@@ -484,6 +484,14 @@ body.mafias-entering .enter{transition:border-color .25s}.enter:focus-visible{ou
 .registration-topbar__sound.on .bars i{animation:eq .6s infinite alternate}
 @media(max-width:600px){.registration-topbar__sound{padding:9px 10px;font-size:8px;letter-spacing:.08em}
   .registration-topbar__sound .bars{height:10px}}
+/* 360–380 px phones: keep the three controls on one row instead of letting
+   "RETURN TO MAFIAS" and "01 / 05" break into two lines each */
+@media(max-width:380px){
+  .registration-topbar{gap:7px;padding:14px 10px}
+  .registration-topbar__back{padding:9px 10px}
+  .registration-topbar__back-label,.registration-topbar__tag{white-space:nowrap;font-size:8px;letter-spacing:.1em}
+  .registration-topbar__sound{padding:8px 9px;font-size:7px;letter-spacing:.06em}
+}
 /* desktop: the section heading stays on one line; it only wraps once the
    two columns stack, and then it can only break between words */
 @media(min-width:961px){.reg-identity .reg-stage__heading{white-space:nowrap}}
